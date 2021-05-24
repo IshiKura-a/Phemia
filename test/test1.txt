@@ -1,0 +1,10 @@
+int main(void)
+{
+    char s;
+    double ff, w;
+    while (true) {
+        break;
+        continue;
+    }
+    return 0;
+}
