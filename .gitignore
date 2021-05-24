@@ -3,3 +3,8 @@ CMakeFiles
 Makefile
 CMakeCache.txt
 cmake_install.cmake
+
+parser.cpp
+parser.hpp
+lexer.cpp
+Phemia
