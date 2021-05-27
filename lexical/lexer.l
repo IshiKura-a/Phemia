@@ -1,6 +1,12 @@
 %{
+#define YYSTYPE char*
+#define YYSTYPE double
+
 #include <stdio.h>
 #include "parser.hpp"
+
+int yywrap();
+void yyerror(char*);
 %}
 
 if                      if
@@ -38,9 +44,13 @@ protected               protected
 
 sizeof                  sizeof
 
-bool                    true | false
-integer                 0 | -?[1-9][0-9]*
+true                    true
+false                   false
+num_integer             0 | -?[1-9][0-9]*
+num_double              [0-9]+[.][0-9]+
+
 newline                 \n | \r\n
+ID                      [a-zA-Z_][0-9a-zA-Z]*
 
 %%
 "("                     {return LSB;}
@@ -49,10 +59,12 @@ newline                 \n | \r\n
 "]"                     {return RMB;}
 "{"                     {return LLB;}
 "}"                     {return RLB;}
+
 "."                     {return DOT;}
 ":"                     {return COLON;}
 ";"                     {return SEMI;}
 ","                     {return COMMA;}
+
 "+"                     {return PLUS;}
 "-"                     {return MINUS;}
 "*"                     {return MUL;}
@@ -61,6 +73,7 @@ newline                 \n | \r\n
 "^"                     {return XOR;}
 "&&"                    {return AND;}
 "||"                    {return OR;}
+
 ">"                     {return GT;}
 ">="                    {return GE;}
 "<"                     {return LT;}
@@ -69,6 +82,12 @@ newline                 \n | \r\n
 "=="                    {return EQ;}
 "="                     {return ASSIGN;}
 "\""                    {return QUOTE;}
+
+"++"                    {return PPLUS;}
+"--"                    {return SSUB;}
+
+
+
 
 {if}                    {return IF;}
 {else}                  {return ELSE;}
@@ -81,11 +100,31 @@ newline                 \n | \r\n
 {case}                  {return CASE;}
 {default}               {return DEFAULT;}
 
-{int}                   {return INT;}
-{char}                  {return CHAR;}
-{double}                {return DOUBLE;}
-{float}                 {return FLOAT;}
-{boolean}               {return BOOLEAN;}
+{int}                   {
+                            yylval.type=(char*)malloc(strlen(yytext)+1);
+                            strcpy(yylval.type,yytext);
+                            return INT;
+                        }
+{char}                  {
+                            yylval.type=(char*)malloc(strlen(yytext)+1);
+                            strcpy(yylval.type,yytext);
+                            return CHAR;
+                        }
+{double}                {
+                            yylval.type=(char*)malloc(strlen(yytext)+1);
+                            strcpy(yylval.type,yytext);
+                            return DOUBLE;
+                        }
+{float}                 {
+                            yylval.type=(char*)malloc(strlen(yytext)+1);
+                            strcpy(yylval.type,yytext);
+                            return FLOAT;
+                        }
+{boolean}               {
+                            yylval.type=(char*)malloc(strlen(yytext)+1);
+                            strcpy(yylval.type,yytext);
+                            return BOOLEAN;
+                        }
 {const}                 {return CONST;}
 {void}                  {return VOID;}
 {enum}                  {return ENUM;}
@@ -104,8 +143,20 @@ newline                 \n | \r\n
 {protected}             {return PROTECTED;}
 
 {sizeof}                {return SIZEOF;}
+{true}                  {yylval.number=1;return NUM;}
+{false}                 {yylval.number=0;return NUM;}
+{newline}               {}
 
-[a-zA-Z_][0-9a-zA-Z]*   {return ID;}
+{num_integer}           {yylval.number=atoi(yytext);return NUM;}
+{num_double}            {yylval.number=atof(yytext);return NUM_DOUBLE;}
+
+{ID}                    {return ID;}
+
+.                       {
+                            sprintf(msg,"yyerror:unexpected input %s",yytext);
+                            yyerror(msg);
+                        }
+
 %%
 
 int yywrap() {
