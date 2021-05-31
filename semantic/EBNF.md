@@ -1,48 +1,63 @@
 ```enbf
-program -> {stmtOrMore}
+program -> {oneStmt}
 
-stmtOrMore -> stmt | blockedStmt
-stmt -> decl ";" | def | exp ";" | ifStmt | forStmt
-    | whileStmt | switchStmt | BREAK ";" | CONTINUE ";"
-    | retStmt ";" | IOStmt ";"
-blockedStmt -> "{" {stmtOrMore} "}"
+oneStmt -> stmt | blockedStmt
+stmt -> decl SEMI | def | exp SEMI | ifStmt | forStmt
+    | whileStmt | switchStmt | BREAK SEMI | CONTINUE SEMI
+    | retStmt SEMI | IOStmt SEMI | throwStmt SEMI
+    | tryStmt
+blockedStmt -> LLB {oneStmt} RLB
 
 
-decl -> idDecl | funcDecl | enumDecl
-idDecl -> type ID [ "=" exp ]{"," ID [ "=" exp ]}
-funcDecl -> FUNCTION ID "(" declParamList ")" ":" type blockedStmt
-enumDecl -> ENUM ID "{" ID "=" exp "," { ID "=" exp } "}"
+decl -> idDecl | constIdDecl | funcDecl | enumDecl
+idDecl -> type ID [ ASSIGN exp ]{COMMA ID [ ASSIGN exp ]}
+constIdDecl -> CONST type ASSIGN exp {COMMA ID ASSIGN exp}
+funcDecl -> FUNCTION ID LSB declParamList RSB COLON type blockedStmt
+enumDecl -> ENUM ID LLB ID ASSIGN exp COMMA { ID ASSIGN exp } RLB
 
-exp -> ["-"] signedExp
+exp -> [MINUS] signedExp
 signedExp -> call
-    | signedExp "+" term
-    | signedExp "-" term
-    | NEW ID "(" paramList ")" {"." ID "(" paramList ")"}
-    | ID {"." ID "(" paramList ")"}
-term -> term "*" factor | term "/" factor | factor
-call -> ID "(" paramList ")"
-factor -> NUMBER | "(" exp ")"
-paramList -> exp {"," exp }
-declParamList -> type ID {"," type ID }
+    | signedExp PLUS term
+    | signedExp MINUS term
+    | NEW ID LSB paramList RSB
+    | NEW type LMB INTEGER RMB
+    | signedExp DOT ID LSB paramList RSB
+    | term
+term -> term MUL factor | term DIV factor | factor
+call -> ID LSB paramList RSB
+factor -> literal | LSB exp RSB | SIZEOF LSB type RSB
+    | LLB exp { COMMA exp } RLB
+    | ID [ DOT LENGTH ]
+literal -> INTEGER | BOOL | WORD | DNUMBER | FNUMBER
+    | CHARACTER
+paramList -> exp {COMMA exp }
+declParamList -> type ID {COMMA type ID }
 
 def -> classDef
-classDef -> CLASS ID [":" ID] "{" {[scope] classCompoDef }"}"
+classDef -> CLASS ID [COLON ID] LLB {[scope] classCompoDef } RLB
 classCompoDef -> funcDef | idDecl
 scope -> PUBLIC | PRIVATE | PROTECTED
 
-ifStmt -> IF "(" exp ")" stmtOrMore [elseStmt]
-elseStmt -> ELSE stmtOrMore
+ifStmt -> IF LSB exp RSB oneStmt [elseStmt]
+elseStmt -> ELSE oneStmt
 
-forStmt -> FOR "(" exp ";" exp ";" exp ")" stmtOrMore
-    | FOR "(" type ID IN exp ")" stmtOrMore
+forStmt -> FOR LSB exp SEMI exp SEMI exp RSB oneStmt
+    | FOR LSB type ID IN exp RSB oneStmt
 
-whileStmt -> WHILE "(" exp ")" stmtOrMore
-switchStmt -> SWITCH "(" exp ")" "{" { caseStmt } "}"
-caseStmt -> CASE exp ":" {stmtOrMore}
-    | DEFAULT ":" {stmtOrMore}
+whileStmt -> WHILE LSB exp RSB oneStmt
+switchStmt -> SWITCH LSB exp RSB LLB { caseStmt } RLB
+caseStmt -> CASE exp COLON {oneStmt}
+    | DEFAULT COLON {oneStmt}
 
 retStmt -> RETURN exp
 
-IOStmt -> READ "(" STRING "," ID {"," ID} ")"
-    | PRINT "(" STRING , exp { "," exp }")"
+IOStmt -> READ LSB STRING COMMA ID {COMMA ID} RSB
+    | PRINT LSB STRING COMMA exp { COMMA exp } RSB
+
+type -> INT | CHAR | DOUBLE | FLOAT | BOOLEAN | VOID
+    | STRING | ID | LMB RMB type
+
+throwStmt -> THROW exp
+
+tryStmt -> TRY LLB {oneStmt} RLB CATCH LSB type ID RSB LLB {oneStmt} RLB
 ```
