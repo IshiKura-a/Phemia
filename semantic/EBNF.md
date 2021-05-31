@@ -56,6 +56,7 @@ IOStmt -> READ LSB STRING COMMA ID {COMMA ID} RSB
 
 type -> INT | CHAR | DOUBLE | FLOAT | BOOLEAN | VOID
     | STRING | ID | LMB RMB type
+    | FUNCTION LSB [type ID {COMMA type ID}] RSB COLON type
 
 throwStmt -> THROW exp
 
