@@ -1,3 +1,3 @@
 cmake .
 make
-./Phemia <test/test1.txt
+./Phemia test/1.txt

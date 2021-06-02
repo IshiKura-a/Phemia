@@ -1,0 +1,6 @@
+function main(): int
+{
+    int a = 66
+    int b = 88
+    return 3
+}
