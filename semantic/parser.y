@@ -21,6 +21,7 @@ extern std::string curToken;
     NIdentifier *id;
     NVariableDeclaration *varDecl;
     VariableList *varVec;
+    ExpressionList *expVec;
     ArrayDimension *arrayDim;
     int32_t token;
 }
@@ -42,8 +43,9 @@ extern std::string curToken;
 %type <block> program blockedStmt stmts
 %type <stmt> stmt funcDecl decl
 %type <id> type id
-%type <expr> exp expr term factor literal call
+%type <expr> exp expr term factor literal call assign
 %type <varVec> declParamList
+%type <expVec> paramList
 %type <varDecl> idDecl constIdDecl
 %type <arrayDim> arrayDimensions
 
@@ -61,6 +63,8 @@ stmts : stmts stmt { $1->statements.push_back($2); }
     ;
 
 stmt : decl { $$ = $1; }
+    | call { $$ = new NExpressionStatement(*$1); }
+    | assign { $$ = new NExpressionStatement(*$1); }
     ;
 
 blockedStmt : LLB stmts RLB { $$ = $2; }
@@ -85,14 +89,14 @@ funcDecl : FUNCTION id LSB declParamList RSB COLON type blockedStmt {
     $$ = new NFunctionDeclaration(*$7, *$2, *$4, *$8); }
     ;
 
-declParamList : idDecl { $$ = $$ = new VariableList(); $$->push_back($1); }
-    | constIdDecl { $$ = $$ = new VariableList(); $$->push_back($1); }
+declParamList : idDecl { $$ = new VariableList(); $$->push_back($1); }
+    | constIdDecl { $$ = new VariableList(); $$->push_back($1); }
     | declParamList COMMA constIdDecl { $1->push_back($3); }
     | declParamList COMMA idDecl { $1->push_back($3); }
     | { $$ = new VariableList(); }
     ;
 
-exp : expr { $$ = $1; }
+exp : expr
     | exp GE expr { $$ = new NBinaryOperator(*$1, $2, *$3); }
     | exp GT expr { $$ = new NBinaryOperator(*$1, $2, *$3); }
     | exp LE expr { $$ = new NBinaryOperator(*$1, $2, *$3); }
@@ -114,7 +118,7 @@ term : term MUL factor { $$ = new NBinaryOperator(*$1, $2, *$3); }
     ;
 factor : literal { $$ = $1; }
     | id { $$ = $1; }
-    | call {}
+    | call { $$ = $1; }
     | LSB exp RSB { $$ = $2; }
     | NOT factor { $$ = new NUnaryOperator($1, *$2); }
     | MINUS factor { $$ = new NUnaryOperator($1, *$2); }
@@ -131,11 +135,12 @@ arrayDimensions : arrayDimensions LMB INT RMB { $1->push_back($3); }
 literalList : literal {}
     | literalList literal {}
     ;
-call : id LSB RSB {}
-    | id LSB paramList RSB {}
+call : id LSB RSB { $$ = new NFunctionCall(*$1, *(new ExpressionList())); }
+    | id LSB paramList RSB { $$ = new NFunctionCall(*$1, *$3); }
     ;
-paramList : exp {}
-    | paramList COMMA exp {}
+assign : id ASSIGN exp { $$ = new NAssignment(*$1, *$3); }
+paramList : exp { $$ = new ExpressionList(); $$->push_back($1); }
+    | paramList COMMA exp { $$->push_back($3); }
     ;
 literal : INTEGER { $$ = new NInteger(*$1); }
     | BOOL { $$ = new NBoolean(*$1); }

@@ -48,7 +48,7 @@ public:
 
     ARStack() { module = new llvm::Module("main", staticContext); }
 
-    void generateCode(NBlock &root, const std::string& bcFile);
+    void generateCode(NBlock &root, const std::string &bcFile);
 
     llvm::GenericValue runCode();
 
@@ -71,11 +71,12 @@ public:
     llvm::Value *getCurrentReturnValue() { return arStack.top()->retVal; }
 };
 
-void ARStack::generateCode(NBlock &root, const std::string& bcFile) {
+void ARStack::generateCode(NBlock &root, const std::string &bcFile) {
     /* Create the top level interpreter function to call as entry */
-    std::vector<llvm::Type*> argTypes;
-    llvm::FunctionType *fType = llvm::FunctionType::get(llvm::Type::getInt32Ty(staticContext), llvm::makeArrayRef(argTypes), false);
-    main = llvm::Function::Create(fType, llvm::GlobalValue::ExternalLinkage, "main", module);
+    std::vector<llvm::Type *> argTypes;
+    llvm::FunctionType *fType = llvm::FunctionType::get(llvm::Type::getInt32Ty(staticContext),
+                                                        llvm::makeArrayRef(argTypes), false);
+    main = llvm::Function::Create(fType, llvm::GlobalValue::ExternalLinkage, "global", module);
     llvm::BasicBlock *bBlock = llvm::BasicBlock::Create(staticContext, "entry", main, nullptr);
 
     /* Push a new variable/block context */
@@ -99,7 +100,7 @@ void ARStack::generateCode(NBlock &root, const std::string& bcFile) {
 llvm::GenericValue ARStack::runCode() {
     llvm::ExecutionEngine *ee = llvm::EngineBuilder(std::unique_ptr<llvm::Module>(module)).create();
     ee->finalizeObject();
-    std::vector <llvm::GenericValue> noArgs;
+    std::vector<llvm::GenericValue> noArgs;
     llvm::GenericValue v = ee->runFunction(main, noArgs);
     return v;
 }
@@ -208,10 +209,13 @@ llvm::Value *NUnaryOperator::codeGen(ARStack &context) {
                        || util::instanceof<NDouble>(rhs));
     switch (op) {
         case NOT:
-            inst = llvm::Instruction::FNeg; break;
+            inst = llvm::Instruction::FNeg;
+            break;
         case MINUS:
-            inst = llvm::Instruction::FNeg; break;
-        default: return nullptr;
+            inst = llvm::Instruction::FNeg;
+            break;
+        default:
+            return nullptr;
     }
     return llvm::UnaryOperator::Create(inst, rhs.codeGen(context), "", context.current());
 }
@@ -219,15 +223,19 @@ llvm::Value *NUnaryOperator::codeGen(ARStack &context) {
 llvm::Value *NIdentifier::codeGen(ARStack &context) {
     if (context.locals().find(name) == context.locals().end()) {
         std::cerr << "Undeclared value: " << name << std::endl;
+        return nullptr;
     }
-    return new llvm::LoadInst(context.locals()[name]->getType(),context.locals()[name], "", false, context.current());
+
+    return new llvm::LoadInst(context.locals()[name]->getType()->getPointerElementType(), context.locals()[name], "",
+                              false, context.current());
 }
 
 llvm::Value *NAssignment::codeGen(ARStack &context) {
-    std::cout << "Creating assignment for " << lhs.name << std::endl;
     if (context.locals().find(lhs.name) == context.locals().end()) {
         std::cerr << "Undeclared value: " << lhs.name << std::endl;
     }
+    std::cout << "Creating assignment for " << lhs.name << " type: " << typeid(rhs.codeGen(context)).name()
+              << std::endl;
     return new llvm::StoreInst(rhs.codeGen(context), context.locals()[lhs.name], false, context.current());
 }
 
@@ -243,7 +251,7 @@ llvm::Value *NBlock::codeGen(ARStack &context) {
     StatementList::const_iterator it;
     llvm::Value *last = nullptr;
     for (it = statements.begin(); it != statements.end(); it++) {
-        auto& statement = **it;
+        auto &statement = **it;
         std::cout << "Generating code for " << typeid(statement).name() << std::endl;
         last = (statement).codeGen(context);
     }
@@ -275,29 +283,49 @@ llvm::Value *NVariableDeclaration::codeGen(ARStack &context) {
 }
 
 llvm::Value *NFunctionDeclaration::codeGen(ARStack &context) {
+    std::cout << "Creating function: " << id.name << std::endl;
     std::vector<llvm::Type *> argTypes;
     for (auto item: arguments) {
         argTypes.push_back(typeOf(item->type.name, {}));
     }
 
     llvm::FunctionType *fType = llvm::FunctionType::get(typeOf(type.name, {}), llvm::makeArrayRef(argTypes), false);
-    llvm::Function *function = llvm::Function::Create(fType, llvm::GlobalValue::InternalLinkage, id.name, context.module);
+    llvm::Function *function = llvm::Function::Create(fType, llvm::GlobalValue::InternalLinkage, id.name,
+                                                      context.module);
     llvm::BasicBlock *bBlock = llvm::BasicBlock::Create(staticContext, "entry", function, nullptr);
 
     context.push(bBlock);
 
     llvm::Function::arg_iterator argsValues = function->arg_begin();
-    llvm::Value* argumentValue;
+    llvm::Value *argumentValue;
 
     for (auto item: arguments) {
         item->codeGen(context);
         argumentValue = &*argsValues++;
         argumentValue->setName(item->id.name);
+        llvm::StoreInst *inst = new llvm::StoreInst(argumentValue, context.locals()[item->id.name], false, bBlock);
     }
 
     block.codeGen(context);
     llvm::ReturnInst::Create(staticContext, context.getCurrentReturnValue(), bBlock);
     context.pop();
+    context.locals()[id.name] = function;
     return function;
 }
+
+llvm::Value *NFunctionCall::codeGen(ARStack &context) {
+    llvm::Function *function = context.module->getFunction(id.name);
+    if (function == nullptr) {
+        std::cerr << "no such function " << id.name << std::endl;
+    }
+    std::vector<llvm::Value *> args;
+    ExpressionList::const_iterator it;
+    for (auto item: params) {
+        args.push_back(item->codeGen(context));
+    }
+    llvm::CallInst *call = llvm::CallInst::Create(function, makeArrayRef(args), "", context.current());
+    std::cout << "Creating method call: " << id.name << std::endl;
+    return call;
+}
+
 #endif //PHEMIA_CODEGEN_HPP

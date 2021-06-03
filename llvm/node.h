@@ -9,8 +9,11 @@
 #include "util.hpp"
 
 class ARStack;
+
 class NStatement;
+
 class NExpression;
+
 class NVariableDeclaration;
 
 typedef std::vector<NStatement *> StatementList;
@@ -220,6 +223,18 @@ public:
     NFunctionDeclaration(const NIdentifier &type, const NIdentifier &id,
                          VariableList arguments, NBlock &block) :
             type(type), id(id), arguments(std::move(arguments)), block(block) {}
+
+    llvm::Value *codeGen(ARStack &context) override;
+};
+
+class NFunctionCall : public NExpression {
+public:
+    const NIdentifier &id;
+    ExpressionList params;
+
+    NFunctionCall(const NIdentifier &id, ExpressionList &params) : id(id), params(params) {}
+
+    NFunctionCall(const NIdentifier &id) : id(id) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };

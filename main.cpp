@@ -30,6 +30,6 @@ int main(int argc, char **argv) {
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
     ARStack context;
-    context.generateCode(*programBlock, "test/1.bc");
+    context.generateCode(*programBlock, "test/output.bc");
     return 0;
 }

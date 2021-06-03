@@ -1,6 +1,2 @@
-function main(): int
-{
-    int a = 66
-    int b = 88
-    return 3
-}
+int a = 3 + 4
+int b = 5 + a
