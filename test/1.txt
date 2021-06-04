@@ -1,2 +1,3 @@
-int a = 3 + 4
-int b = 5 + a
+string c = "123"
+c[2] = 'd'
+char d = c[2]

@@ -19,7 +19,7 @@ class NVariableDeclaration;
 typedef std::vector<NStatement *> StatementList;
 typedef std::vector<NExpression *> ExpressionList;
 typedef std::vector<NVariableDeclaration *> VariableList;
-typedef std::vector<uint32_t> ArrayDimension;
+typedef std::vector<std::string *> ArrayDimension;
 
 class Node {
 public:
@@ -107,14 +107,14 @@ public:
 class NArray : public NExpression {
 public:
     NIdentifier type;
-    uint32_t length;
-    std::vector<std::string> initList;
+    ArrayDimension arrDim;
+    ExpressionList initList;
 
-    NArray(NIdentifier type, const std::vector<std::string> &initList) : type(std::move(type)), initList(initList) {
-        length = initList.size();
-    }
+    NArray(ArrayDimension &arrDim, NIdentifier type, ExpressionList &initList) : arrDim(arrDim),
+                                                                                    type(std::move(type)),
+                                                                                    initList(initList) {}
 
-    NArray(NIdentifier type, int32_t length) : type(std::move(type)), length(length) {}
+    NArray(ArrayDimension &arrDim, NIdentifier type) : arrDim(arrDim), type(std::move(type)) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
@@ -162,10 +162,10 @@ public:
 
 class NArrayAssignment : public NAssignment {
 public:
-    NInteger &index;
+    ExpressionList arrayIndices;
 
-    NArrayAssignment(NIdentifier &lhs, NInteger &index, NExpression &rhs)
-            : index(index), NAssignment(lhs, rhs) {}
+    NArrayAssignment(NIdentifier &lhs, ExpressionList &arrayIndices, NExpression &rhs)
+            : arrayIndices(arrayIndices), NAssignment(lhs, rhs) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
@@ -221,8 +221,8 @@ public:
     NBlock &block;
 
     NFunctionDeclaration(const NIdentifier &type, const NIdentifier &id,
-                         VariableList arguments, NBlock &block) :
-            type(type), id(id), arguments(std::move(arguments)), block(block) {}
+                         VariableList arguments, NBlock &block) : type(type), id(id), arguments(std::move(arguments)),
+                                                                  block(block) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
@@ -239,4 +239,35 @@ public:
     llvm::Value *codeGen(ARStack &context) override;
 };
 
+class NArrayDeclaration : public NStatement {
+public:
+    const NIdentifier &type;
+    NIdentifier &id;
+    ArrayDimension arrDim;
+    ExpressionList value;
+
+    NArrayDeclaration(NIdentifier &type, NIdentifier &id, ArrayDimension &arrDim, ExpressionList &value) : type(
+            type), id(id), arrDim(arrDim), value(value) {}
+
+    llvm::Value *codeGen(ARStack &context) override;
+
+};
+
+class NArrayElement : public NExpression {
+public:
+    const NIdentifier &id;
+    ExpressionList arrayIndices;
+
+    NArrayElement(const NIdentifier &id, ExpressionList &arrayIndices) : id(id), arrayIndices(arrayIndices) {}
+
+    llvm::Value *codeGen(ARStack &context) override;
+};
+
+class NArrayType : public NIdentifier {
+public:
+    ArrayDimension arrDim;
+    NArrayType(ArrayDimension& arrDim, NIdentifier& id) : arrDim(arrDim), NIdentifier(id) {}
+
+    llvm::Value *codeGen(ARStack &context) override;
+};
 #endif

@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.19.0)
 project(Phemia)
 
 set (CMAKE_CXX_STANDARD 14)
+set (CMAKE_CXX_FLAGS '-g')
+set (CMAKE_BUILD_TYPE Debug)
 
 find_package(FLEX REQUIRED)
 find_package(BISON REQUIRED)

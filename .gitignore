@@ -13,3 +13,4 @@ lexer.cpp
 Phemia
 Phemia.cbp
 **/*.bc
+**/*.o

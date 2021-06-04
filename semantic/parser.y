@@ -22,7 +22,7 @@ extern std::string curToken;
     NVariableDeclaration *varDecl;
     VariableList *varVec;
     ExpressionList *expVec;
-    ArrayDimension *arrayDim;
+    ArrayDimension *arrDim;
     int32_t token;
 }
 
@@ -42,12 +42,12 @@ extern std::string curToken;
 
 %type <block> program blockedStmt stmts
 %type <stmt> stmt funcDecl decl
-%type <id> type id
+%type <id> type id basicType
 %type <expr> exp expr term factor literal call assign
 %type <varVec> declParamList
-%type <expVec> paramList
+%type <expVec> paramList arrayIndices expList expArray
 %type <varDecl> idDecl constIdDecl
-%type <arrayDim> arrayDimensions
+%type <arrDim> arrayDimensions
 
 %left PLUS MINUS MUL DIV MOD XOR AND OR NOT
 %left GT GE LT LE NE EQ
@@ -79,6 +79,13 @@ decl : idDecl { $$ = $1; }
 
 idDecl : type id { $$ = new NVariableDeclaration(false, *$1, *$2); }
     | type id ASSIGN exp { $$ = new NVariableDeclaration(false, *$1, *$2, $4); }
+    ;
+
+expArray : LLB expList RLB { $$ = $2; }
+    ;
+expList : expList COMMA exp { $$->push_back($3); }
+    | exp { $$ = new ExpressionList(); $$->push_back($1); }
+    | { $$ = new ExpressionList(); }
     ;
 
 constIdDecl : CONST type id { $$ = new NVariableDeclaration(true, *$2, *$3); }
@@ -124,21 +131,23 @@ factor : literal { $$ = $1; }
     | MINUS factor { $$ = new NUnaryOperator($1, *$2); }
     | id DOT id {}
     | id DOT call {}
-    | id LMB exp RMB {}
-    | arrayDimensions LLB literalList RLB {}
-    | arrayDimensions LLB RLB {}
+    | id arrayIndices { $$ = new NArrayElement(*$1, *$2); }
+    | arrayDimensions type expArray { $$ = new NArray(*$1, *$2, *$3); }
     | SIZEOF LSB type RSB {}
     ;
-arrayDimensions : arrayDimensions LMB INT RMB { $1->push_back($3); }
-    | LMB INT RMB { $$ = new ArrayDimension(); $$->push_back($2); }
+arrayDimensions : arrayDimensions LMB INTEGER RMB { $$->push_back($3); }
+    | LMB INTEGER RMB { $$ = new ArrayDimension(); $$->push_back($2); }
     ;
-literalList : literal {}
-    | literalList literal {}
+arrayIndices : arrayIndices LMB exp RMB { $1->push_back($3); }
+    | LMB exp RMB { $$ = new ExpressionList(); $$->push_back($2); }
     ;
 call : id LSB RSB { $$ = new NFunctionCall(*$1, *(new ExpressionList())); }
     | id LSB paramList RSB { $$ = new NFunctionCall(*$1, *$3); }
     ;
 assign : id ASSIGN exp { $$ = new NAssignment(*$1, *$3); }
+    | id arrayIndices ASSIGN exp { $$ = new NArrayAssignment(*$1, *$2, *$4); }
+    | id DOT id RMB ASSIGN exp {}
+    ;
 paramList : exp { $$ = new ExpressionList(); $$->push_back($1); }
     | paramList COMMA exp { $$->push_back($3); }
     ;
@@ -150,15 +159,18 @@ literal : INTEGER { $$ = new NInteger(*$1); }
     | CHARACTER { $$ = new NChar(*$1); }
     ;
 
-type : INT { $$ = new NIdentifier("int"); }
+type : id { $$ = $1; }
+    | basicType { $$ = $1; }
+    | arrayDimensions basicType { $$ = new NArrayType(*$1, *$2); }
+    ;
+
+basicType : INT { $$ = new NIdentifier("int"); }
     | CHAR { $$ = new NIdentifier("char"); }
     | DOUBLE { $$ = new NIdentifier("double"); }
     | FLOAT { $$ = new NIdentifier("float"); }
     | BOOLEAN { $$ = new NIdentifier("boolean"); }
     | VOID { $$ = new NIdentifier("void"); }
     | STRING { $$ = new NIdentifier("string"); }
-    | id { $$ = $1; }
-    | LMB RMB type { $$ = new NIdentifier(std::string("[]").append($3->name)); }
     ;
 
 id : ID { $$ = new NIdentifier(*$1); };

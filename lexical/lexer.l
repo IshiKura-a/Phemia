@@ -53,6 +53,7 @@ protected               protected
 
 sizeof                  sizeof
 
+comment                 "//".*|[/][*][^*]*[*]+([^*/][^*]*[*]+)*[/]
 bool                    true|false
 integer                 0|-?[1-9][0-9]*
 fNumber                 [0-9]+(\.[0-9]+)f
@@ -61,12 +62,13 @@ character               '.'
 str                     \".*\"
 
 %%
+{comment}               {incPos(); for(auto ch: std::string(yytext, yyleng)) if(ch == '\n') incLine(); }
 {bool}                  {incPos(); STRING_TOKEN; return BOOL;}
 {integer}               {incPos(); STRING_TOKEN; return INTEGER;}
 {fNumber}               {incPos(); STRING_TOKEN; return FNUMBER;}
 {dNumber}               {incPos(); STRING_TOKEN; return DNUMBER;}
-{character}             {incPos(); STRING_TOKEN; return CHARACTER;}
-{str}                   {incPos(); STRING_TOKEN; return STR;}
+{character}             {incPos(); yylval.val = new std::string(yytext + 1, yyleng - 2); return CHARACTER;}
+{str}                   {incPos(); yylval.val = new std::string(yytext + 1, yyleng - 2); return STR;}
 
 [ \t]                   {incPos();}
 \n|\r\n                 {incLine();};
@@ -96,7 +98,6 @@ str                     \".*\"
 "!"                     {incPos(); TOKEN(NOT); return NOT;}
 "=="                    {incPos(); TOKEN(EQ); return EQ;}
 "="                     {incPos(); TOKEN(ASSIGN); return ASSIGN;}
-"\""                    {incPos(); TOKEN(QUOTE); return QUOTE;}
 
 {if}                    {incPos(); TOKEN(IF); return IF;}
 {else}                  {incPos(); TOKEN(ELSE); return ELSE;}
@@ -137,7 +138,7 @@ str                     \".*\"
 
 [a-zA-Z_][0-9a-zA-Z]*   {incPos(); STRING_TOKEN; return ID;}
 
-.                       {printf("Unknown token!\n"); yyterminate();}
+.                       {incPos(); printf("Unknown token!\n"); yyterminate();}
 %%
 
 void incPos() {
