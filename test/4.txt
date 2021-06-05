@@ -1,0 +1,34 @@
+
+function main(int i, int j) : int {
+    return i+j;
+};
+
+function sum(int n): int {
+    if (n) {
+        return n + sum(n-1);
+    } else {
+        return 0;
+    }
+};
+
+int a = main(3, 4);
+
+int b = main(3, main(4, 5));
+
+int c = sum(5);
+
+
+string s = "123";
+[2]int arr = [2]int{1,2};
+
+char st = s[0];
+int arrt = arr[0];
+
+function test(string ss, [2]int arrr): int {
+    char s = ss[2];
+    arrr[0] = arrr[0] + arrr[1];
+    return arrr[0];
+};
+
+int d = test(s, arr);
+int e = arr[0];

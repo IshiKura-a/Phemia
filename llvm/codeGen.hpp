@@ -26,7 +26,7 @@
 #include "parser.hpp"
 #include "util.hpp"
 
-#define PRINT(s) std::cout << "-------\n";s->print(llvm::outs());
+#define PRINT(s) std::cout << "\n-------\n";s->print(llvm::outs());std::cout << "\n-------\n";
 
 class NBlock;
 
@@ -71,7 +71,7 @@ public:
     llvm::IRBuilder<> builder;
     llvm::Module *module;
 
-    ARStack() : builder(llvmContext) { module = new llvm::Module("main", llvmContext); }
+    ARStack() : builder(llvmContext) { module = new llvm::Module("__program_entry_main", llvmContext); }
 
     void generateCode(NBlock &root, const std::string &bcFile);
 
@@ -130,7 +130,8 @@ public:
         } else if (type == "boolean") {
             return llvm::Type::getInt1Ty(llvmContext);
         } else if (type == "string") {
-            return llvm::PointerType::getInt8Ty(llvmContext);
+            return llvm::PointerType::getInt8PtrTy(llvmContext);
+//            return llvm::ArrayType::get(typeOf("char"), 0);
         } else return llvm::Type::getVoidTy(llvmContext);
     }
 
@@ -149,7 +150,7 @@ void ARStack::generateCode(NBlock &root, const std::string &bcFile) {
     std::vector<llvm::Type *> argTypes;
     llvm::FunctionType *fType = llvm::FunctionType::get(llvm::Type::getVoidTy(llvmContext),
                                                         llvm::makeArrayRef(argTypes), false);
-    main = llvm::Function::Create(fType, llvm::GlobalValue::ExternalLinkage, "main", module);
+    main = llvm::Function::Create(fType, llvm::GlobalValue::ExternalLinkage, "__program_entry_main", module);
     llvm::BasicBlock *bBlock = llvm::BasicBlock::Create(llvmContext, "entry", main, nullptr);
     builder.SetInsertPoint(bBlock);
     /* Push a new variable/block context */
@@ -247,36 +248,36 @@ llvm::Value *NVoid::codeGen(ARStack &context) {
 
 llvm::Value *NArray::codeGen(ARStack &context) {
     auto dType = context.typeOf(type->name);
-    if(initList) {
+    if (initList) {
         std::vector<llvm::Constant *> arr;
-        switch((*initList->begin())->getDType()) {
+        switch ((*initList->begin())->getDType()) {
             case INTEGER: {
                 for (auto ch: *initList) {
-                    arr.push_back(llvm::ConstantInt::get(dType, dynamic_cast<NInteger*>(ch)->value));
+                    arr.push_back(llvm::ConstantInt::get(dType, dynamic_cast<NInteger *>(ch)->value));
                 }
                 break;
             }
             case CHARACTER: {
                 for (auto ch: *initList) {
-                    arr.push_back(llvm::ConstantInt::get(dType, dynamic_cast<NChar*>(ch)->value));
+                    arr.push_back(llvm::ConstantInt::get(dType, dynamic_cast<NChar *>(ch)->value));
                 }
                 break;
             }
             case DNUMBER: {
                 for (auto ch: *initList) {
-                    arr.push_back(llvm::ConstantFP::get(dType, dynamic_cast<NDouble*>(ch)->value));
+                    arr.push_back(llvm::ConstantFP::get(dType, dynamic_cast<NDouble *>(ch)->value));
                 }
                 break;
             }
             case FNUMBER: {
                 for (auto ch: *initList) {
-                    arr.push_back(llvm::ConstantInt::get(dType, dynamic_cast<NFloat*>(ch)->value));
+                    arr.push_back(llvm::ConstantInt::get(dType, dynamic_cast<NFloat *>(ch)->value));
                 }
                 break;
             }
             case BOOL: {
                 for (auto ch: *initList) {
-                    arr.push_back(llvm::ConstantInt::get(dType, dynamic_cast<NBoolean*>(ch)->value));
+                    arr.push_back(llvm::ConstantInt::get(dType, dynamic_cast<NBoolean *>(ch)->value));
                 }
                 break;
             }
@@ -297,13 +298,8 @@ llvm::Value *NArray::codeGen(ARStack &context) {
             return globalDeclaration;
         }
     } else {
-        uint64_t size = 1;
         auto *arrSize = new std::vector<uint32_t>();
-        for (auto dim: *arrDim) {
-            uint32_t n = strtol(dim->c_str(), nullptr, 10);
-            size *= n;
-            arrSize->push_back(n);
-        }
+        uint64_t size = util::calArrayDim(arrDim, arrSize);
         llvm::Value *sizeValue = NInteger(std::to_string(size)).codeGen(context);
         auto arrType = llvm::ArrayType::get(dType, size);
         auto alloc = context.builder.CreateAlloca(arrType, sizeValue, "");
@@ -389,7 +385,7 @@ llvm::Value *NIdentifier::codeGen(ARStack &context) {
         std::cerr << "Undeclared value: " << name << std::endl;
         return nullptr;
     }
-    auto type = id->getType();
+    auto type = id->getType()->getPointerElementType();
     if (type->isIntegerTy() || type->isDoubleTy() || type->isFloatTy())
         return context.builder.CreateLoad(id, false, "");
     else return id;
@@ -408,7 +404,12 @@ llvm::Value *NAssignment::codeGen(ARStack &context) {
     if (type->isArrayTy() || (type->isPointerTy() && type->getPointerElementType()->isArrayTy())) {
         val->setName(lhs.name);
         res = val;
+        if (id && !id->value) id->value = val;
+        if (id && id->size && *id->size->begin() == 0) {
+            (*(id->size))[0] = val->getType()->getArrayNumElements();
+        }
     } else {
+        assert (id->value);
         context.builder.CreateStore(val, id->value);
         res = id->value;
     }
@@ -444,8 +445,9 @@ llvm::Value *NArrayAssignment::codeGen(ARStack &context) {
     }
     auto idx = exp->codeGen(context);
     std::vector<llvm::Value *> arrV;
+    if (!id->value->getType()->isPointerTy())
+        arrV.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(context.llvmContext), 0));
     arrV.push_back(idx);
-    arrV.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(context.llvmContext), 0));
     auto ptr = context.builder.CreateInBoundsGEP(id->value, llvm::makeArrayRef(arrV), "elementPtr");
     return context.builder.CreateAlignedStore(val, ptr, llvm::MaybeAlign(4));
 }
@@ -476,6 +478,7 @@ llvm::Value *NReturnStatement::codeGen(ARStack &context) {
     std::cout << "Generating return code for " << typeid(expression).name() << std::endl;
     llvm::Value *retVal = expression.codeGen(context);
     context.setCurrentReturnValue(retVal);
+    context.builder.CreateRet(context.getCurrentReturnValue());
     return retVal;
 }
 
@@ -496,27 +499,19 @@ llvm::Value *NVariableDeclaration::codeGen(ARStack &context) {
             (new NAssignment(id, *assignmentExpr))->codeGen(context);
         }
     } else if (arrDim) {
-        uint64_t size = 1;
         auto *arrSize = new std::vector<uint32_t>();
-        for (auto dim: *arrDim) {
-            uint32_t n = strtol(dim->c_str(), nullptr, 10);
-            size *= n;
-            arrSize->push_back(n);
-        }
+        uint64_t size = util::calArrayDim(arrDim, arrSize);
         if (assignmentExpr) {
             alloc = (new NAssignment(id, *assignmentExpr, true))->codeGen(context);
             context.locals()[id.name] = new VariableRecord(alloc, dType, arrSize);
         } else {
-            std::cerr << "Array is not initialized!\n";
+            context.locals()[id.name] = new VariableRecord(nullptr, dType, arrSize);
         }
     } else {
         uint32_t size = 0;
         if (assignmentExpr) {
             alloc = (new NAssignment(id, *assignmentExpr, true))->codeGen(context);
             size = alloc->getType()->getPointerElementType()->getArrayNumElements();
-        } else {
-            alloc = context.builder.CreateAlloca(llvm::ArrayType::get(dType, size), context.builder.getInt32(size),
-                                                 id.name);
         }
         auto sizeV = new std::vector<uint32_t>{size};
         context.locals()[id.name] = new VariableRecord(alloc, dType, sizeV);
@@ -528,16 +523,18 @@ llvm::Value *NFunctionDeclaration::codeGen(ARStack &context) {
     std::cout << "Creating function: " << id.name << std::endl;
     std::vector<llvm::Type *> argTypes;
     for (auto item: arguments) {
-        // TODO: array
-        argTypes.push_back(context.typeOf(item->type.name));
+        auto arrDim = item->type.getArrayDim();
+        if (arrDim) {
+            argTypes.push_back(context.typeOf(item->type.name)->getPointerTo());
+        } else argTypes.push_back(context.typeOf(item->type.name));
     }
 
     llvm::FunctionType *fType = llvm::FunctionType::get(context.typeOf(type.name), llvm::makeArrayRef(argTypes), false);
     llvm::Function *function = llvm::Function::Create(fType, llvm::GlobalValue::InternalLinkage, id.name,
                                                       context.module);
-    llvm::BasicBlock *bBlock = llvm::BasicBlock::Create(context.llvmContext, "entry", function, nullptr);
-    context.builder.SetInsertPoint(bBlock);
+    llvm::BasicBlock *bBlock = llvm::BasicBlock::Create(context.llvmContext, id.name + "_entry", function, nullptr);
     context.push(bBlock);
+    context.builder.SetInsertPoint(bBlock);
 
     llvm::Function::arg_iterator argsValues = function->arg_begin();
     llvm::Value *argumentValue;
@@ -546,12 +543,19 @@ llvm::Value *NFunctionDeclaration::codeGen(ARStack &context) {
         auto alloc = item->codeGen(context);
         argumentValue = &*argsValues++;
         argumentValue->setName(item->id.name);
-        context.builder.CreateStore(argumentValue, alloc, false);
+
+        if (alloc) {
+            context.builder.CreateStore(argumentValue, alloc, false);
+        } else {
+            PRINT(argumentValue);
+            context.current()->localVal[item->id.name]->value = argumentValue;
+        }
     }
 
     block.codeGen(context);
-    context.builder.CreateRet(context.getCurrentReturnValue());
     context.pop();
+    context.builder.SetInsertPoint(context.current()->block);
+
     context.locals()[id.name] = new VariableRecord(function, fType, nullptr);
     return function;
 }
@@ -563,7 +567,14 @@ llvm::Value *NFunctionCall::codeGen(ARStack &context) {
     }
     std::vector<llvm::Value *> args;
     for (auto item: params) {
-        args.push_back(item->codeGen(context));
+        auto val = item->codeGen(context);
+        if (val->getType()->isArrayTy())
+            val = context.builder.CreateBitCast(val, val->getType()->getArrayElementType()->getPointerTo());
+        else if (val->getType()->isPointerTy() && val->getType()->getPointerElementType()->isArrayTy()) {
+            val = context.builder.CreateBitCast(
+                    val, val->getType()->getPointerElementType()->getArrayElementType()->getPointerTo());
+        }
+        args.push_back(val);
     }
 
     std::cout << "Creating method call: " << id.name << std::endl;
@@ -590,7 +601,8 @@ llvm::Value *NArrayElement::codeGen(ARStack &context) {
     }
     auto idx = exp->codeGen(context);
     std::vector<llvm::Value *> arrV;
-    arrV.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(context.llvmContext), 0));
+    if (!arr->value->getType()->isPointerTy())
+        arrV.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(context.llvmContext), 0));
     arrV.push_back(idx);
     auto ptr = context.builder.CreateInBoundsGEP(arr->value, llvm::makeArrayRef(arrV), "elementPtr");
     return context.builder.CreateAlignedLoad(ptr, llvm::MaybeAlign(4));

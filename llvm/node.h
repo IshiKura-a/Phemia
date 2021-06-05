@@ -6,7 +6,6 @@
 #include <vector>
 #include <string>
 #include <llvm/IR/Value.h>
-#include "util.hpp"
 
 class ARStack;
 

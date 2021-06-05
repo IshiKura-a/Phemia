@@ -63,14 +63,14 @@ stmts : stmts stmt { $1->statements.push_back($2); }
     | stmt { $$ = new NBlock(); $$->statements.push_back($1); }
     ;
 
-stmt : decl { $$ = $1; }
+stmt : decl SEMI { $$ = $1; }
     | ifStmt { $$ = $1; }
     | forStmt { $$ = $1; }
     | whileStmt { $$ = $1; }
-    | doWhileStmt { $$ = $1; }
-    | exp { $$ = new NExpressionStatement($1); }
-    | BREAK { $$ = new NBreakStatement(); }
-    | CONTINUE { $$ = new NContinueStatement(); }
+    | doWhileStmt SEMI{ $$ = $1; }
+    | exp SEMI { $$ = new NExpressionStatement($1); }
+    | BREAK SEMI { $$ = new NBreakStatement(); }
+    | CONTINUE SEMI { $$ = new NContinueStatement(); }
     ;
 
 whileStmt : WHILE LSB exp RSB blockedStmt { $$ = new NWhileStatement($3, $5); }
@@ -79,7 +79,8 @@ whileStmt : WHILE LSB exp RSB blockedStmt { $$ = new NWhileStatement($3, $5); }
 doWhileStmt : DO blockedStmt WHILE LSB exp RSB { $$ = new NDoWhileStatement($5, $2); }
     ;
 
-nullableStmt : stmt { $$ = $1; }
+nullableStmt : decl { $$ = $1; }
+    | exp { $$ = new NExpressionStatement($1); }
     | { $$ = nullptr; }
     ;
 

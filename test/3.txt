@@ -1,26 +1,26 @@
-int i
+int i;
 for (i=0; i<=3;i++) {
     if (i) {
-        break
+        break;
     } else {
-        continue
+        continue;
     }
 }
 
 while (i) {
     if (i == 1) {
-        break
+        break;
     }
-    continue
+    continue;
 
-    char x = 'x'
+    char x = 'x';
 }
 
 do {
     if (i == 1) {
-        break
+        break;
     }
-    continue
+    continue;
 
-    char x = 'x'
-} while(true)
+    char x = 'x';
+} while(true);
