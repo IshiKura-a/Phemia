@@ -1,0 +1,16 @@
+if (1) {
+    int a = 1
+}
+
+int b = 2;
+if (b) {
+    char s = 's'
+} else {
+    char s = 's'
+}
+
+if (b-2) {
+    char s = 's'
+} else if (b*1) {
+    char s = 's'
+}

@@ -1,0 +1,17 @@
+// int a = 1;
+// int b = a++;
+// int c = ++a;
+// int d = a--;
+// int e = --a;
+
+string f = "123";
+string g = f;
+string h = g;
+
+//char i = f[3];
+//f[1] = '5';
+
+[3][2][2]int j = new [3][2][2]int();
+[2][1]char k = [2][1]char{ 'c', 'd' };
+[3][2]boolean l = [3][2]boolean{ true, false, true, true, true, false };
+boolean m = l[3][1];

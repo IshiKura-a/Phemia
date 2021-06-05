@@ -1,0 +1,26 @@
+int i;
+for (i=0; i<=3;i++) {
+    if (i) {
+        break;
+    } else {
+        continue;
+    }
+}
+
+while (i) {
+    if (i == 1) {
+        break;
+    }
+    continue;
+
+    char x = 'x';
+}
+
+do {
+    if (i == 1) {
+        break;
+    }
+    continue;
+
+    char x = 'x';
+} while(true);

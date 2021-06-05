@@ -1,5 +1,8 @@
 .DS_Store
+.idea
+.vscode
 CMakeFiles
+Testing
 Makefile
 CMakeCache.txt
 cmake_install.cmake
@@ -8,3 +11,6 @@ parser.cpp
 parser.hpp
 lexer.cpp
 Phemia
+Phemia.cbp
+**/*.bc
+**/*.o
