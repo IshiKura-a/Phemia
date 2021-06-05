@@ -1,0 +1,16 @@
+function gcd(int a, int b): int {
+    if (a < b) {
+        return gcd(b, a);
+    }
+    if (b == 0) {
+        return a;
+    }
+    return gcd(b, a%b);
+};
+
+int a;
+int b;
+while(1) {
+    scanf("%d%d", a, b);
+    printf("gcd(a,b): %d\n", gcd(a,b));
+}

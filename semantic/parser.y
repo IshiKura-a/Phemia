@@ -1,5 +1,7 @@
 %{
 #include <iostream>
+#include <string>
+#include <vector>
 #include "node.h"
 
 extern int yylex();

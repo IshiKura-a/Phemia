@@ -1,5 +1,5 @@
 
-function main(int i, int j) : int {
+function main1(int i, int j) : int {
     return i+j;
 };
 
@@ -11,9 +11,9 @@ function sum(int n): int {
     }
 };
 
-int a = main(3, 4);
+int a = main1(3, 4);
 
-int b = main(3, main(4, 5));
+int b = main1(3, main1(4, 5));
 
 int c = sum(5);
 
@@ -32,3 +32,5 @@ function test(string ss, [2]int arrr): int {
 
 int d = test(s, arr);
 int e = arr[0];
+
+printf("%d\n", e);

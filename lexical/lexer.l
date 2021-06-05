@@ -1,6 +1,7 @@
 %{
-#include <cstdio>
+#include <iostream>
 #include <string>
+#include <vector>
 #include "node.h"
 #include "parser.hpp"
 
@@ -12,6 +13,7 @@ int charLine = 1;
 std::string curToken;
 void incPos();
 void incLine();
+std::string* escapeStr(char ch[], int length);
 %}
 
 %option noyywrap
@@ -58,7 +60,7 @@ bool                    true|false
 integer                 0|[1-9][0-9]*
 fNumber                 [0-9]+(\.[0-9]+)f
 dNumber                 [0-9]+(\.[0-9]+)d?
-character               '.'
+character               '.'|'\\.'
 str                     \".*\"
 
 %%
@@ -67,8 +69,8 @@ str                     \".*\"
 {integer}               {incPos(); STRING_TOKEN; return INTEGER;}
 {fNumber}               {incPos(); STRING_TOKEN; return FNUMBER;}
 {dNumber}               {incPos(); STRING_TOKEN; return DNUMBER;}
-{character}             {incPos(); yylval.val = new std::string(yytext + 1, yyleng - 2); return CHARACTER;}
-{str}                   {incPos(); yylval.val = new std::string(yytext + 1, yyleng - 2); return STR;}
+{character}             {incPos(); yylval.val = escapeStr(yytext + 1, yyleng - 2); return CHARACTER;}
+{str}                   {incPos(); yylval.val = escapeStr(yytext + 1, yyleng - 2); return STR;}
 
 [ \t]                   {incPos();}
 \n|\r\n                 {incLine();};
@@ -151,4 +153,33 @@ void incPos() {
 void incLine() {
     charPos = 0;
     charLine++;
+}
+
+std::string *escapeStr(char ch[], int length)
+{
+    std::vector<char> cVec;
+    int i;
+    char prev = '\0';
+    for (i = 0; i < length; i++) {
+        if (prev != '\\') {
+            if (ch[i] != '\\') {
+                cVec.push_back(ch[i]);
+            } else {
+                prev = '\\';
+            }
+        } else {
+            switch (ch[i])
+            {
+            case 'n': cVec.push_back('\n'); prev = '\0'; break;
+            case 't': cVec.push_back('\t'); prev = '\0'; break;
+            case 'b': cVec.push_back('\b'); prev = '\0'; break;
+            case '\'': cVec.push_back('\''); prev = '\0'; break;
+            case '\"': cVec.push_back('\"'); prev = '\0'; break;
+            case '0': cVec.push_back('\0'); prev = '\0'; break;
+            case '\\': cVec.push_back('\\'); prev = '\0'; break;
+            default: prev = '\0'; break;
+            }
+        }
+    }
+    return new std::string(cVec.begin(), cVec.end());
 }

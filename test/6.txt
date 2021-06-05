@@ -1,0 +1,3 @@
+[10]char s = new [10]char();
+scanf("%s", s);
+printf("%c\n", s[0]);

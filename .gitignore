@@ -11,6 +11,7 @@ parser.cpp
 parser.hpp
 lexer.cpp
 Phemia
-Phemia.cbp
+Output
+**/*.cbp
 **/*.bc
 **/*.o

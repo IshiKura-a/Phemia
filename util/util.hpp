@@ -24,5 +24,33 @@ namespace util {
         }
         return size;
     }
+
+    std::string *escpaeStr(char ch[], int length)
+    {
+        std::vector<char> cVec;
+        int i;
+        char prev = '\0';
+        for (i = 0; i < length; i++) {
+            if (prev != '\\') {
+                if (ch[i] != '\\') {
+                    cVec.push_back(ch[i]);
+                } else {
+                    prev = '\\';
+                }
+            } else {
+                switch (ch[i])
+                {
+                    case 'n': cVec.push_back('\n'); prev = '\0'; break;
+                    case 't': cVec.push_back('\t'); prev = '\0'; break;
+                    case 'b': cVec.push_back('\b'); prev = '\0'; break;
+                    case '\'': cVec.push_back('\''); prev = '\0'; break;
+                    case '\"': cVec.push_back('\"'); prev = '\0'; break;
+                    case '0': cVec.push_back('\0'); prev = '\0'; break;
+                    default: prev = '\0'; break;
+                }
+            }
+        }
+        return new std::string(cVec.begin(), cVec.end());
+    }
 }
 #endif //PHEMIA_UTIL_HPP

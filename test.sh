@@ -1,6 +1,6 @@
-cmake .
-make
-./Phemia test/4.txt
-#llc -filetype=obj output.bc
-#gcc my-file.o
-#./a.out
+cmake . &&
+make &&
+./Phemia test/6.txt &&
+llc -filetype=obj test/output.bc &&
+gcc test/output.o -oOutput &&
+./output
