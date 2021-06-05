@@ -46,7 +46,7 @@ extern std::string curToken;
 %type <id> type id basicType
 %type <expr> exp expr term factor literal call assign
 %type <varVec> declParamList
-%type <expVec> paramList arrayIndices expList expArray
+%type <expVec> paramList arrayIndices literalList literalArray
 %type <varDecl> idDecl constIdDecl
 %type <arrDim> arrayDimensions
 
@@ -107,11 +107,10 @@ idDecl : type id { $$ = new NVariableDeclaration(false, *$1, *$2); }
     | type id ASSIGN exp { $$ = new NVariableDeclaration(false, *$1, *$2, $4); }
     ;
 
-expArray : LLB expList RLB { $$ = $2; }
+literalArray : LLB literalList RLB { $$ = $2; }
     ;
-expList : expList COMMA exp { $$->push_back($3); }
-    | exp { $$ = new ExpressionList(); $$->push_back($1); }
-    | { $$ = new ExpressionList(); }
+literalList : literalList COMMA literal { $$->push_back($3); }
+    | literal { $$ = new ExpressionList(); $$->push_back($1); }
     ;
 
 constIdDecl : CONST type id { $$ = new NVariableDeclaration(true, *$2, *$3); }
@@ -163,7 +162,8 @@ factor : literal { $$ = $1; }
     | id DOT id {}
     | id DOT call {}
     | id arrayIndices { $$ = new NArrayElement(*$1, *$2); }
-    | arrayDimensions type expArray { $$ = new NArray(*$1, *$2, *$3); }
+    | arrayDimensions type literalArray { $$ = new NArray($1, $2, $3); }
+    | NEW arrayDimensions type LSB RSB { $$ = new NArray($2, $3); }
     | SIZEOF LSB type RSB {}
     ;
 arrayDimensions : arrayDimensions LMB INTEGER RMB { $$->push_back($3); }
@@ -192,7 +192,7 @@ literal : INTEGER { $$ = new NInteger(*$1); }
 
 type : id { $$ = $1; }
     | basicType { $$ = $1; }
-    | arrayDimensions basicType { $$ = new NArrayType(*$1, *$2); }
+    | arrayDimensions basicType { $$ = new NArrayType($1, *$2); }
     ;
 
 basicType : INT { $$ = new NIdentifier("int"); }

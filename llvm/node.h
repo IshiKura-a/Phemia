@@ -29,6 +29,8 @@ public:
 };
 
 class NExpression : public Node {
+public:
+    virtual int getDType();
 };
 
 class NStatement : public Node {
@@ -38,9 +40,11 @@ class NIdentifier : public NExpression {
 public:
     std::string name;
 
-    NIdentifier(std::string name) : name(std::move(name)) {}
+    explicit NIdentifier(std::string name) : name(std::move(name)) {}
 
     llvm::Value *codeGen(ARStack &context) override;
+
+    virtual ArrayDimension *getArrayDim() { return nullptr; }
 };
 
 class NInteger : public NExpression {
@@ -50,71 +54,73 @@ public:
     NInteger(const std::string &value) : value(std::strtol(value.c_str(), nullptr, 10)) {}
 
     llvm::Value *codeGen(ARStack &context) override;
+    int getDType() override;
 };
 
 class NFloat : public NExpression {
 public:
     float value;
 
-    NFloat(const std::string &value) : value(std::strtof(value.c_str(), nullptr)) {}
+    explicit NFloat(const std::string &value) : value(std::strtof(value.c_str(), nullptr)) {}
 
     llvm::Value *codeGen(ARStack &context) override;
+    int getDType() override;
 };
 
 class NDouble : public NExpression {
 public:
     double value;
 
-    NDouble(const std::string &value) : value(std::strtod(value.c_str(), nullptr)) {}
+    explicit NDouble(const std::string &value) : value(std::strtod(value.c_str(), nullptr)) {}
 
     llvm::Value *codeGen(ARStack &context) override;
+    int getDType() override;
 };
 
 class NBoolean : public NExpression {
 public:
     bool value;
 
-    NBoolean(const std::string &value) : value(value == "true") {}
+    explicit NBoolean(const std::string &value) : value(value == "true") {}
 
     llvm::Value *codeGen(ARStack &context) override;
+    int getDType() override;
 };
 
 class NChar : public NExpression {
 public:
     char value;
 
-    NChar(const std::string &value) : value(value[0]) {}
+    explicit NChar(const std::string &value) : value(value[0]) {}
 
     llvm::Value *codeGen(ARStack &context) override;
+    int getDType() override;
 };
 
 class NString : public NExpression {
 public:
     std::string value;
 
-    NString(std::string value) : value(std::move(value)) {}
+    explicit NString(std::string value) : value(std::move(value)) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
 
 class NVoid : public NExpression {
 public:
-    NVoid() {}
+    NVoid() = default;
 
     llvm::Value *codeGen(ARStack &context) override;
 };
 
 class NArray : public NExpression {
 public:
-    NIdentifier type;
-    ArrayDimension arrDim;
-    ExpressionList initList;
+    NIdentifier *type;
+    ArrayDimension *arrDim;
+    ExpressionList *initList;
 
-    NArray(ArrayDimension &arrDim, NIdentifier type, ExpressionList &initList) : arrDim(arrDim),
-                                                                                 type(std::move(type)),
-                                                                                 initList(initList) {}
-
-    NArray(ArrayDimension &arrDim, NIdentifier type) : arrDim(arrDim), type(std::move(type)) {}
+    NArray(ArrayDimension *arrDim, NIdentifier *type, ExpressionList *initList = nullptr) :
+            arrDim(arrDim), type(type), initList(initList) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
@@ -145,7 +151,10 @@ public:
     NIdentifier &lhs;
     NExpression &rhs;
 
-    NAssignment(NIdentifier &lhs, NExpression &rhs) : lhs(lhs), rhs(rhs) {}
+    bool allowDecl = false;
+
+    NAssignment(NIdentifier &lhs, NExpression &rhs, bool allowDecl = false) : lhs(lhs), rhs(rhs),
+                                                                              allowDecl(allowDecl) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
@@ -174,7 +183,7 @@ class NBlock : public NExpression {
 public:
     StatementList statements;
 
-    NBlock() {}
+    NBlock() = default;
 
     llvm::Value *codeGen(ARStack &context) override;
 };
@@ -183,7 +192,7 @@ class NExpressionStatement : public NStatement {
 public:
     NExpression *expression;
 
-    NExpressionStatement(NExpression *expression = nullptr) : expression(expression) {}
+    explicit NExpressionStatement(NExpression *expression = nullptr) : expression(expression) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
@@ -192,22 +201,23 @@ class NReturnStatement : public NStatement {
 public:
     NExpression &expression;
 
-    NReturnStatement(NExpression &expression) : expression(expression) {}
+    explicit NReturnStatement(NExpression &expression) : expression(expression) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
 
 class NVariableDeclaration : public NStatement {
 public:
-    const NIdentifier &type;
+    NIdentifier &type;
     NIdentifier &id;
     NExpression *assignmentExpr;
     const bool isConst;
 
-    NVariableDeclaration(const bool isConst, const NIdentifier &type, NIdentifier &id) : isConst(isConst), type(type),
-                                                                                         id(id) { assignmentExpr = nullptr; }
+    NVariableDeclaration(const bool isConst, NIdentifier &type, NIdentifier &id) : isConst(isConst),
+                                                                                  type(type),
+                                                                                  id(id) { assignmentExpr = nullptr; }
 
-    NVariableDeclaration(const bool isConst, const NIdentifier &type, NIdentifier &id, NExpression *assignmentExpr)
+    NVariableDeclaration(const bool isConst, NIdentifier &type, NIdentifier &id, NExpression *assignmentExpr)
             : isConst(isConst), type(type), id(id), assignmentExpr(assignmentExpr) {}
 
     llvm::Value *codeGen(ARStack &context) override;
@@ -239,20 +249,6 @@ public:
     llvm::Value *codeGen(ARStack &context) override;
 };
 
-class NArrayDeclaration : public NStatement {
-public:
-    const NIdentifier &type;
-    NIdentifier &id;
-    ArrayDimension arrDim;
-    ExpressionList value;
-
-    NArrayDeclaration(NIdentifier &type, NIdentifier &id, ArrayDimension &arrDim, ExpressionList &value) : type(
-            type), id(id), arrDim(arrDim), value(value) {}
-
-    llvm::Value *codeGen(ARStack &context) override;
-
-};
-
 class NArrayElement : public NExpression {
 public:
     const NIdentifier &id;
@@ -265,11 +261,11 @@ public:
 
 class NArrayType : public NIdentifier {
 public:
-    ArrayDimension arrDim;
+    ArrayDimension *arrDim;
 
-    NArrayType(ArrayDimension &arrDim, NIdentifier &id) : arrDim(arrDim), NIdentifier(id) {}
+    NArrayType(ArrayDimension *arrDim, NIdentifier &id) : arrDim(arrDim), NIdentifier(id) {}
 
-    llvm::Value *codeGen(ARStack &context) override;
+    ArrayDimension *getArrayDim() { return arrDim; }
 };
 
 class NIfStatement : public NStatement {
@@ -307,37 +303,42 @@ public:
     llvm::Value *codeGen(ARStack &context) override;
 };
 
-class NIncOperator: public NUnaryOperator {
+class NIncOperator : public NUnaryOperator {
 public:
     bool isPrefix;
-    NIncOperator(int op, NExpression &rhs, bool isPrefix): NUnaryOperator(op, rhs), isPrefix(isPrefix) {}
+
+    NIncOperator(int op, NExpression &rhs, bool isPrefix) : NUnaryOperator(op, rhs), isPrefix(isPrefix) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
 
-class NDecOperator: public NUnaryOperator {
+class NDecOperator : public NUnaryOperator {
 public:
     bool isPrefix;
-    NDecOperator(int op, NExpression &rhs, bool isPrefix): NUnaryOperator(op, rhs), isPrefix(isPrefix) {}
+
+    NDecOperator(int op, NExpression &rhs, bool isPrefix) : NUnaryOperator(op, rhs), isPrefix(isPrefix) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
 
-class NWhileStatement: public NStatement {
+class NWhileStatement : public NStatement {
 public:
     NExpression *condition;
     NBlock *block;
-    NWhileStatement(NExpression* condition, NBlock* block): condition(condition), block(block) {}
+
+    NWhileStatement(NExpression *condition, NBlock *block) : condition(condition), block(block) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
 
-class NDoWhileStatement: public NStatement {
+class NDoWhileStatement : public NStatement {
 public:
     NExpression *condition;
     NBlock *block;
-    NDoWhileStatement(NExpression* condition, NBlock* block): condition(condition), block(block) {}
+
+    NDoWhileStatement(NExpression *condition, NBlock *block) : condition(condition), block(block) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
+
 #endif

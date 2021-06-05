@@ -1,5 +1,17 @@
-int a = 1
-int b = a++
-int c = ++a
-int d = a--
-int e = --a
+// int a = 1
+// int b = a++
+// int c = ++a
+// int d = a--
+// int e = --a
+
+//string s = "123"
+//string d = s
+//string a = d
+
+//char u = s[3]
+//s[1] = '5'
+
+[3][2][2]int arr = new [3][2][2]int()
+[2][1]char str = [2][1]char{ 'c', 'd' }
+[3][2]boolean ss = [3][2]boolean{ true, false, true, true, true, false }
+boolean a = ss[3][1]
