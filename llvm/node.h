@@ -111,8 +111,8 @@ public:
     ExpressionList initList;
 
     NArray(ArrayDimension &arrDim, NIdentifier type, ExpressionList &initList) : arrDim(arrDim),
-                                                                                    type(std::move(type)),
-                                                                                    initList(initList) {}
+                                                                                 type(std::move(type)),
+                                                                                 initList(initList) {}
 
     NArray(ArrayDimension &arrDim, NIdentifier type) : arrDim(arrDim), type(std::move(type)) {}
 
@@ -181,9 +181,9 @@ public:
 
 class NExpressionStatement : public NStatement {
 public:
-    NExpression &expression;
+    NExpression *expression;
 
-    NExpressionStatement(NExpression &expression) : expression(expression) {}
+    NExpressionStatement(NExpression *expression = nullptr) : expression(expression) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
@@ -266,7 +266,77 @@ public:
 class NArrayType : public NIdentifier {
 public:
     ArrayDimension arrDim;
-    NArrayType(ArrayDimension& arrDim, NIdentifier& id) : arrDim(arrDim), NIdentifier(id) {}
+
+    NArrayType(ArrayDimension &arrDim, NIdentifier &id) : arrDim(arrDim), NIdentifier(id) {}
+
+    llvm::Value *codeGen(ARStack &context) override;
+};
+
+class NIfStatement : public NStatement {
+public:
+    NExpression *condition;
+    NBlock *thenBlock;
+    NBlock *elseBlock;
+
+    NIfStatement(NExpression *condition, NBlock *thenBlock, NBlock *elseBlock = nullptr) :
+            condition(condition), thenBlock(thenBlock), elseBlock(elseBlock) {}
+
+    llvm::Value *codeGen(ARStack &context) override;
+};
+
+class NForStatement : public NStatement {
+public:
+    NStatement *init;
+    NExpression *condition;
+    NStatement *inc;
+    NBlock *block;
+
+    NForStatement(NStatement *init, NExpression *condition, NStatement *inc, NBlock *block) :
+            init(init), condition(condition), inc(inc), block(block) {}
+
+    llvm::Value *codeGen(ARStack &context) override;
+};
+
+class NBreakStatement : public NStatement {
+public:
+    llvm::Value *codeGen(ARStack &context) override;
+};
+
+class NContinueStatement : public NStatement {
+public:
+    llvm::Value *codeGen(ARStack &context) override;
+};
+
+class NIncOperator: public NUnaryOperator {
+public:
+    bool isPrefix;
+    NIncOperator(int op, NExpression &rhs, bool isPrefix): NUnaryOperator(op, rhs), isPrefix(isPrefix) {}
+
+    llvm::Value *codeGen(ARStack &context) override;
+};
+
+class NDecOperator: public NUnaryOperator {
+public:
+    bool isPrefix;
+    NDecOperator(int op, NExpression &rhs, bool isPrefix): NUnaryOperator(op, rhs), isPrefix(isPrefix) {}
+
+    llvm::Value *codeGen(ARStack &context) override;
+};
+
+class NWhileStatement: public NStatement {
+public:
+    NExpression *condition;
+    NBlock *block;
+    NWhileStatement(NExpression* condition, NBlock* block): condition(condition), block(block) {}
+
+    llvm::Value *codeGen(ARStack &context) override;
+};
+
+class NDoWhileStatement: public NStatement {
+public:
+    NExpression *condition;
+    NBlock *block;
+    NDoWhileStatement(NExpression* condition, NBlock* block): condition(condition), block(block) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };

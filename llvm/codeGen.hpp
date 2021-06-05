@@ -38,13 +38,25 @@ public:
             value(value), dType(dType), size(size) {}
 };
 
+class LoopInfo {
+public:
+    NExpression* cond = nullptr;
+    NStatement* inc = nullptr;
+    llvm::BasicBlock *loop = nullptr;
+    llvm::BasicBlock *after = nullptr;
+
+    LoopInfo(NExpression* cond, NStatement* inc, llvm::BasicBlock *loop, llvm::BasicBlock *after):
+            cond(cond), inc(inc), loop(loop), after(after) {}
+};
+
 class ActiveRecord {
 public:
     llvm::BasicBlock *block = nullptr;
     llvm::Value *retVal = nullptr;
     std::map<std::string, VariableRecord *> localVal;
+    LoopInfo* info = nullptr;
 
-    ActiveRecord(llvm::BasicBlock *block, llvm::Value *retVal) : block(block), retVal(retVal) {}
+    ActiveRecord(llvm::BasicBlock *block, llvm::Value *retVal = nullptr, LoopInfo* info = nullptr) : block(block), retVal(retVal), info(info) {}
 };
 
 
@@ -73,10 +85,23 @@ public:
         return nullptr;
     }
 
-    llvm::BasicBlock *current() { return arStack.back()->block; }
+    auto *current() { return arStack.back(); }
+
+    LoopInfo *currentLoop() {
+        for(auto it = arStack.rbegin(); it != arStack.rend(); it++) {
+            if((**it).info) {
+                return (**it).info;
+            }
+        }
+        return nullptr;
+    }
 
     void push(llvm::BasicBlock *block) {
-        arStack.push_back(new ActiveRecord(block, nullptr));
+        arStack.push_back(new ActiveRecord(block));
+    }
+
+    void push(llvm::BasicBlock *block, LoopInfo* info) {
+        arStack.push_back(new ActiveRecord(block, nullptr, info));
     }
 
     void pop() {
@@ -105,6 +130,15 @@ public:
             return llvm::PointerType::getInt8Ty(llvmContext);
         } else return llvm::Type::getVoidTy(llvmContext);
     }
+
+    llvm::Value *castToBoolean(llvm::Value *value) {
+        if (value->getType()->isIntegerTy()) {
+            return builder.CreateICmpNE(value, builder.CreateIntCast(
+                    builder.getInt1(false), value->getType(), false));
+        } else if (value->getType()->isFloatTy() || value->getType()->isDoubleTy()) {
+            return builder.CreateFCmpONE(value, llvm::ConstantFP::get(llvmContext, llvm::APFloat(0.0)));
+        } else return builder.getInt1(true);
+    }
 };
 
 void ARStack::generateCode(NBlock &root, const std::string &bcFile) {
@@ -118,6 +152,7 @@ void ARStack::generateCode(NBlock &root, const std::string &bcFile) {
     /* Push a new variable/block context */
     push(bBlock);
     root.codeGen(*this); /* emit bytecode for the toplevel block */
+    builder.CreateRetVoid();
     pop();
 
     /* Print the bytecode in a human-readable format to see if our program compiled properly */
@@ -176,8 +211,7 @@ llvm::Value *NString::codeGen(ARStack &context) {
     globalDeclaration->setLinkage(llvm::GlobalValue::LinkageTypes::PrivateLinkage);
     globalDeclaration->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
 
-    // Return a cast to an i8*
-    return llvm::ConstantExpr::getBitCast(globalDeclaration, charType->getPointerTo());
+    return globalDeclaration;
 }
 
 llvm::Value *NVoid::codeGen(ARStack &context) {
@@ -209,13 +243,13 @@ llvm::Value *NBinaryOperator::codeGen(ARStack &context) {
     bool isFP = false;
 
     // type upgrade
-    if ((L->getType()->getTypeID() == llvm::Type::DoubleTyID) ||
-        (R->getType()->getTypeID() == llvm::Type::DoubleTyID)) {
+    if ((!L->getType()->isIntegerTy()) ||
+        (!R->getType()->isIntegerTy())) {
         isFP = true;
-        if ((R->getType()->getTypeID() != llvm::Type::DoubleTyID)) {
+        if (R->getType()->isIntegerTy()) {
             R = context.builder.CreateUIToFP(R, llvm::Type::getDoubleTy(context.llvmContext), "FTMP");
         }
-        if ((L->getType()->getTypeID() != llvm::Type::DoubleTyID)) {
+        if (L->getType()->isIntegerTy()) {
             L = context.builder.CreateUIToFP(L, llvm::Type::getDoubleTy(context.llvmContext), "FTMP");
         }
     }
@@ -255,7 +289,7 @@ llvm::Value *NBinaryOperator::codeGen(ARStack &context) {
         case EQ:
             return isFP ? context.builder.CreateFCmpUEQ(L, R, "FEQ") : context.builder.CreateICmpEQ(L, R, "EQ");
         case NE:
-            return isFP ? context.builder.CreateFCmpUNE(L, R, "FEQ") : context.builder.CreateICmpNE(L, R, "EQ");
+            return isFP ? context.builder.CreateFCmpUNE(L, R, "FEQ") : context.builder.CreateICmpNE(L, R, "NE");
         default:
             return nullptr;
     }
@@ -295,7 +329,11 @@ llvm::Value *NAssignment::codeGen(ARStack &context) {
     }
     std::cout << "Creating assignment for " << lhs.name << std::endl;
     auto val = rhs.codeGen(context);
-    context.builder.CreateStore(val, id->value);
+    if (util::instanceof<NString>(rhs)) {
+        context.builder.CreateStore(val, id->value);
+    } else {
+        context.builder.CreateStore(val, id->value);
+    }
     return id->value;
 }
 
@@ -328,7 +366,7 @@ llvm::Value *NArrayAssignment::codeGen(ARStack &context) {
     }
     auto idx = exp->codeGen(context);
     std::vector<llvm::Value *> arrV;
-//    arrV.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(context.llvmContext), 0));
+    arrV.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(context.llvmContext), 0));
     arrV.push_back(idx);
     auto ptr = context.builder.CreateInBoundsGEP(id->value, llvm::makeArrayRef(arrV), "elementPtr");
     return context.builder.CreateAlignedStore(val, ptr, llvm::MaybeAlign(4));
@@ -353,7 +391,7 @@ llvm::Value *NBlock::codeGen(ARStack &context) {
 
 llvm::Value *NExpressionStatement::codeGen(ARStack &context) {
     std::cout << "Generating code for " << typeid(expression).name() << std::endl;
-    return expression.codeGen(context);
+    return expression->codeGen(context);
 }
 
 llvm::Value *NReturnStatement::codeGen(ARStack &context) {
@@ -380,9 +418,10 @@ llvm::Value *NVariableDeclaration::codeGen(ARStack &context) {
         alloc = context.builder.CreateAlloca(arrType, sizeValue, id.name);
         context.locals()[id.name] = new VariableRecord(alloc, dType, arrSize);
     } else if (type.name == "string") {
-        uint32_t size = assignmentExpr ? dynamic_cast<NString *>(assignmentExpr)->value.size(): 0;
+        uint32_t size = assignmentExpr ? dynamic_cast<NString *>(assignmentExpr)->value.size() : 0;
         auto sizeV = new std::vector<uint32_t>{size};
-        alloc = context.builder.CreateAlloca(dType->getPointerTo(), context.builder.getInt32(size), id.name);
+        alloc = context.builder.CreateAlloca(llvm::ArrayType::get(dType, size), context.builder.getInt32(size),
+                                             id.name);
         context.locals()[id.name] = new VariableRecord(alloc, dType, sizeV);
     } else {
         alloc = context.builder.CreateAlloca(dType, nullptr, id.name);
@@ -461,7 +500,7 @@ llvm::Value *NArrayElement::codeGen(ARStack &context) {
     }
     auto idx = exp->codeGen(context);
     std::vector<llvm::Value *> arrV;
-//    arrV.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(context.llvmContext), 0));
+    arrV.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(context.llvmContext), 0));
     arrV.push_back(idx);
     auto ptr = context.builder.CreateInBoundsGEP(arr->value, llvm::makeArrayRef(arrV), "elementPtr");
     return context.builder.CreateAlignedLoad(ptr, llvm::MaybeAlign(4));
@@ -471,4 +510,179 @@ llvm::Value *NArrayType::codeGen(ARStack &context) {
     return nullptr;
 }
 
+llvm::Value *NIfStatement::codeGen(ARStack &context) {
+    std::cout << "Creating if statement" << std::endl;
+    llvm::Value *condValue = condition->codeGen(context);
+    if (!condValue)
+        return nullptr;
+
+    condValue = context.castToBoolean(condValue);
+
+    llvm::Function *function = context.builder.GetInsertBlock()->getParent(); // the function where if statement is in
+
+    llvm::BasicBlock *thenBB = llvm::BasicBlock::Create(context.llvmContext, "then", function);
+    llvm::BasicBlock *elseBB = llvm::BasicBlock::Create(context.llvmContext, "else");
+    llvm::BasicBlock *afterBB = llvm::BasicBlock::Create(context.llvmContext, "afterIf");
+
+    if (elseBlock) {
+        context.builder.CreateCondBr(condValue, thenBB, elseBB);
+    } else {
+        context.builder.CreateCondBr(condValue, thenBB, afterBB);
+    }
+
+    context.builder.SetInsertPoint(thenBB);
+
+    context.push(thenBB);
+
+    this->thenBlock->codeGen(context);
+
+    context.pop();
+
+    thenBB = context.builder.GetInsertBlock();
+
+    if (thenBB->getTerminator() == nullptr) {
+        context.builder.CreateBr(afterBB);
+    }
+
+    if (elseBlock) {
+        function->getBasicBlockList().push_back(elseBB);
+        context.builder.SetInsertPoint(elseBB);
+
+        context.push(thenBB);
+
+        elseBlock->codeGen(context);
+
+        context.pop();
+
+        context.builder.CreateBr(afterBB);
+    }
+
+    function->getBasicBlockList().push_back(afterBB);
+    context.builder.SetInsertPoint(afterBB);
+
+    return nullptr;
+}
+
+llvm::Value *NForStatement::codeGen(ARStack &context) {
+    llvm::Function *function = context.builder.GetInsertBlock()->getParent();
+
+    llvm::BasicBlock *forLoop = llvm::BasicBlock::Create(context.llvmContext, "forLoop", function);
+    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterFor");
+
+    if (init)
+        init->codeGen(context);
+
+    llvm::Value *condValue = condition->codeGen(context);
+    condValue = context.castToBoolean(condValue);
+
+    context.builder.CreateCondBr(condValue, forLoop, after);
+    context.builder.SetInsertPoint(forLoop);
+    context.push(forLoop, new LoopInfo(condition, inc, forLoop, after));
+    block->codeGen(context);
+    context.pop();
+
+    if (inc) {
+        inc->codeGen(context);
+    }
+
+    condValue = condition->codeGen(context);
+    condValue = context.castToBoolean(condValue);
+    context.builder.CreateCondBr(condValue, forLoop, after);
+
+    function->getBasicBlockList().push_back(after);
+    context.builder.SetInsertPoint(after);
+
+    return nullptr;
+}
+
+llvm::Value *NWhileStatement::codeGen(ARStack &context) {
+    llvm::Function *function = context.builder.GetInsertBlock()->getParent();
+
+    llvm::BasicBlock *whileLoop = llvm::BasicBlock::Create(context.llvmContext, "whileLoop", function);
+    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterWhile");
+
+    llvm::Value *condValue = condition->codeGen(context);
+    condValue = context.castToBoolean(condValue);
+
+    context.builder.CreateCondBr(condValue, whileLoop, after);
+    context.builder.SetInsertPoint(whileLoop);
+    context.push(whileLoop, new LoopInfo(condition, nullptr, whileLoop, after));
+    block->codeGen(context);
+    context.pop();
+
+    condValue = condition->codeGen(context);
+    condValue = context.castToBoolean(condValue);
+    context.builder.CreateCondBr(condValue, whileLoop, after);
+
+    function->getBasicBlockList().push_back(after);
+    context.builder.SetInsertPoint(after);
+
+    return nullptr;
+}
+
+llvm::Value *NDoWhileStatement::codeGen(ARStack &context) {
+    llvm::Function *function = context.builder.GetInsertBlock()->getParent();
+
+    llvm::BasicBlock *whileLoop = llvm::BasicBlock::Create(context.llvmContext, "doWhileLoop", function);
+    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterDoWhile");
+
+    context.builder.SetInsertPoint(whileLoop);
+    context.push(whileLoop, new LoopInfo(condition, nullptr, whileLoop, after));
+    block->codeGen(context);
+    context.pop();
+
+    llvm::Value *condValue = condition->codeGen(context);
+    condValue = context.castToBoolean(condValue);
+    context.builder.CreateCondBr(condValue, whileLoop, after);
+
+    function->getBasicBlockList().push_back(after);
+    context.builder.SetInsertPoint(after);
+
+    return nullptr;
+}
+
+llvm::Value* NBreakStatement::codeGen(ARStack &context) {
+    LoopInfo* info = context.currentLoop();
+    if(info) {
+        context.builder.CreateBr(info->after);
+    } else {
+        std::cerr << "Use break outside loop!\n";
+    }
+    return nullptr;
+}
+
+llvm::Value* NContinueStatement::codeGen(ARStack &context) {
+    LoopInfo* info = context.currentLoop();
+    if(info) {
+        if(info->inc) {
+            info->inc->codeGen(context);
+        }
+        auto cond = info->cond->codeGen(context);
+        cond->print(llvm::outs());
+        context.builder.CreateCondBr(cond, info->loop, info->after);
+    } else {
+        std::cerr << "Use continue outside loop!\n";
+    }
+    return nullptr;
+}
+
+llvm::Value* NIncOperator::codeGen(ARStack &context) {
+    auto R = rhs.codeGen(context);
+    auto type = R->getType();
+    assert(type->isIntegerTy() || type->isDoubleTy() || type->isFloatTy());
+    bool isFP = !type->isIntegerTy();
+    auto L = isFP ? llvm::ConstantFP::get(type, 1.0) : llvm::ConstantInt::get(type, 1);
+    auto res = isFP ? context.builder.CreateFAdd(L, R, "FINC") : context.builder.CreateAdd(L, R, "INC");
+    return isPrefix ? res : R;
+}
+
+llvm::Value* NDecOperator::codeGen(ARStack &context) {
+    auto R = rhs.codeGen(context);
+    auto type = R->getType();
+    assert(type->isIntegerTy() || type->isDoubleTy() || type->isFloatTy());
+    bool isFP = !type->isIntegerTy();
+    auto L = isFP ? llvm::ConstantFP::get(type, 1.0) : llvm::ConstantInt::get(type, 1);
+    auto res = isFP ? context.builder.CreateFSub(R, L, "FDEC") : context.builder.CreateSub(R, L, "DEC");
+    return isPrefix ? res : R;
+}
 #endif //PHEMIA_CODEGEN_HPP

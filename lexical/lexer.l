@@ -55,7 +55,7 @@ sizeof                  sizeof
 
 comment                 "//".*|[/][*][^*]*[*]+([^*/][^*]*[*]+)*[/]
 bool                    true|false
-integer                 0|-?[1-9][0-9]*
+integer                 0|[1-9][0-9]*
 fNumber                 [0-9]+(\.[0-9]+)f
 dNumber                 [0-9]+(\.[0-9]+)d?
 character               '.'
@@ -72,6 +72,8 @@ str                     \".*\"
 
 [ \t]                   {incPos();}
 \n|\r\n                 {incLine();};
+"++"                    {incPos(); TOKEN(INC); return INC;}
+"--"                    {incPos(); TOKEN(DEC); return DEC;}
 "("                     {incPos(); TOKEN(LSB); return LSB;}
 ")"                     {incPos(); TOKEN(RSB); return RSB;}
 "["                     {incPos(); TOKEN(LMB); return LMB;}

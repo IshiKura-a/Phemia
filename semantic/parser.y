@@ -28,7 +28,7 @@ extern std::string curToken;
 
 %token <token> LSB RSB LMB RMB LLB RLB DOT COLON SEMI
 %token <token> PLUS MINUS MUL DIV MOD XOR AND OR QUOTE
-%token <token> GT GE LT LE NE EQ ASSIGN NOT COMMA
+%token <token> GT GE LT LE NE EQ ASSIGN NOT COMMA INC DEC
 
 %token <token> IF ELSE WHILE FOR DO BREAK CONTINUE
 %token <token> SWITCH CASE DEFAULT FUNCTION
@@ -41,7 +41,8 @@ extern std::string curToken;
 %token <val> INTEGER BOOL DNUMBER FNUMBER CHARACTER STR
 
 %type <block> program blockedStmt stmts
-%type <stmt> stmt funcDecl decl
+%type <stmt> stmt funcDecl decl ifStmt forStmt nullableStmt
+%type <stmt> whileStmt doWhileStmt
 %type <id> type id basicType
 %type <expr> exp expr term factor literal call assign
 %type <varVec> declParamList
@@ -63,10 +64,35 @@ stmts : stmts stmt { $1->statements.push_back($2); }
     ;
 
 stmt : decl { $$ = $1; }
-    | call { $$ = new NExpressionStatement(*$1); }
-    | assign { $$ = new NExpressionStatement(*$1); }
+    | ifStmt { $$ = $1; }
+    | forStmt { $$ = $1; }
+    | whileStmt { $$ = $1; }
+    | doWhileStmt { $$ = $1; }
+    | exp { $$ = new NExpressionStatement($1); }
+    | BREAK { $$ = new NBreakStatement(); }
+    | CONTINUE { $$ = new NContinueStatement(); }
     ;
 
+whileStmt : WHILE LSB exp RSB blockedStmt { $$ = new NWhileStatement($3, $5); }
+    ;
+
+doWhileStmt : DO blockedStmt WHILE LSB exp RSB { $$ = new NDoWhileStatement($5, $2); }
+    ;
+
+nullableStmt : stmt { $$ = $1; }
+    | { $$ = nullptr; }
+    ;
+
+ifStmt : IF LSB exp RSB blockedStmt { $$ = new NIfStatement($3, $5); }
+    | IF LSB exp RSB blockedStmt ELSE blockedStmt { $$ = new NIfStatement($3, $5, $7); }
+    | IF LSB exp RSB blockedStmt ELSE ifStmt { 
+        auto elseBlock = new NBlock();
+        elseBlock->statements.push_back($7);
+        $$ = new NIfStatement($3, $5, elseBlock);
+    }
+    ;
+
+forStmt : FOR LSB nullableStmt SEMI exp SEMI nullableStmt RSB blockedStmt { $$ = new NForStatement($3, $5, $7, $9); }
 blockedStmt : LLB stmts RLB { $$ = $2; }
     | LLB RLB { $$ = new NBlock(); }
     ;
@@ -126,9 +152,14 @@ term : term MUL factor { $$ = new NBinaryOperator(*$1, $2, *$3); }
 factor : literal { $$ = $1; }
     | id { $$ = $1; }
     | call { $$ = $1; }
+    | assign { $$ = $1; }
     | LSB exp RSB { $$ = $2; }
     | NOT factor { $$ = new NUnaryOperator($1, *$2); }
     | MINUS factor { $$ = new NUnaryOperator($1, *$2); }
+    | INC factor { $$ = new NIncOperator($1, *$2, true); }
+    | DEC factor { $$ = new NDecOperator($1, *$2, true); }
+    | factor INC { $$ = new NIncOperator($2, *$1, false); }
+    | factor DEC { $$ = new NDecOperator($2, *$1, false); }
     | id DOT id {}
     | id DOT call {}
     | id arrayIndices { $$ = new NArrayElement(*$1, *$2); }

@@ -53,8 +53,8 @@ classDef -> CLASS ID [COLON ID] LLB {[scope] classCompoDef} RLB
 classCompoDef -> funcDef | idDecl
 scope -> PUBLIC | PRIVATE | PROTECTED
 
-ifStmt -> IF LSB exp RSB oneStmt [elseStmt]
-elseStmt -> ELSE oneStmt
+ifStmt -> IF LSB exp RSB oneStmt [elseBlock]
+elseBlock -> ELSE oneStmt
 
 forStmt -> FOR LSB exp SEMI exp SEMI exp RSB oneStmt
     | FOR LSB type ID IN exp RSB oneStmt
