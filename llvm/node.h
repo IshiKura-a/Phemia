@@ -198,9 +198,9 @@ public:
 
 class NReturnStatement : public NStatement {
 public:
-    NExpression &expression;
+    NExpression *expression;
 
-    explicit NReturnStatement(NExpression &expression) : expression(expression) {}
+    explicit NReturnStatement(NExpression *expression = nullptr) : expression(expression) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };

@@ -486,11 +486,17 @@ llvm::Value *NExpressionStatement::codeGen(ARStack &context) {
 }
 
 llvm::Value *NReturnStatement::codeGen(ARStack &context) {
-    std::cout << "Generating return code for " << typeid(expression).name() << std::endl;
-    llvm::Value *retVal = expression.codeGen(context);
-    context.setCurrentReturnValue(retVal);
-    context.builder.CreateRet(context.getCurrentReturnValue());
-    return retVal;
+    if(expression) {
+        std::cout << "Generating return code for " << typeid(expression).name() << std::endl;
+        llvm::Value *retVal = expression->codeGen(context);
+        context.setCurrentReturnValue(retVal);
+        context.builder.CreateRet(context.getCurrentReturnValue());
+        return retVal;
+    }
+    else {
+        return context.builder.CreateRetVoid();
+    }
+
 }
 
 llvm::Value *NVariableDeclaration::codeGen(ARStack &context) {

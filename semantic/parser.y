@@ -70,6 +70,7 @@ stmt : decl SEMI { $$ = $1; }
     | forStmt { $$ = $1; }
     | whileStmt { $$ = $1; }
     | doWhileStmt SEMI{ $$ = $1; }
+    | assign SEMI { $$ = new NExpressionStatement($1); }
     | exp SEMI { $$ = new NExpressionStatement($1); }
     | BREAK SEMI { $$ = new NBreakStatement(); }
     | CONTINUE SEMI { $$ = new NContinueStatement(); }
@@ -103,7 +104,8 @@ blockedStmt : LLB stmts RLB { $$ = $2; }
 decl : idDecl { $$ = $1; }
     | constIdDecl { $$ = $1; }
     | funcDecl { $$ = $1; }
-    | RETURN exp { $$ = new NReturnStatement(*$2); }
+    | RETURN exp { $$ = new NReturnStatement($2); }
+    | RETURN { $$ = new NReturnStatement(); }
     ;
 
 idDecl : type id { $$ = new NVariableDeclaration(false, *$1, *$2); }
@@ -154,7 +156,6 @@ term : term MUL factor { $$ = new NBinaryOperator($1, $2, $3); }
 factor : literal { $$ = $1; }
     | id { $$ = $1; }
     | call { $$ = $1; }
-    | assign { $$ = $1; }
     | LSB exp RSB { $$ = $2; }
     | NOT factor { $$ = new NUnaryOperator($1, $2); }
     | MINUS factor { $$ = new NUnaryOperator($1, $2); }

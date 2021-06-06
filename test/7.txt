@@ -1,11 +1,38 @@
-function test(): void {
-    int i = 0;
-    function t(): void {
-        printf("%d\n", i);
-    };
-    i++;
-    t();
+function qsort([1000]int a, int low, int high): void {
+    printf("hello");
+    if(low<high)
+    	{
+    		int key = a[low];
+    		int i=low;
+    		int j=high;
+    		while(i<j)
+    		{
+    			while((a[j]>=key)&&(i<j)) {j--;}
+    			a[i]=a[j];
+    			while((a[i]<=key)&&(i<j)) {i++;}
+    			a[j]=a[i];
+    		}
+    		a[i]=key;
+    		qsort(a, low,i-1);
+    		qsort(a, i+1,high);
+    	}
 };
 
-test();
 
+int n;
+scanf("%d\n", n);
+[1000]int a = new [1000]int();
+int i;
+
+for (i=0; i<n; i++) {
+    int tmp;
+    scanf("%d", tmp);
+    a[i] = tmp;
+}
+
+
+qsort(a, 0, n-1);
+
+for (i=0; i<n; i++) {
+    printf("%d\n", a[i]);
+}
