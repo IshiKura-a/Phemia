@@ -1,7 +1,9 @@
 int h1;
 int w1;
 scanf("%d %d",h1,w1);
-[1000]int matrix1 = new [1000]int();
+[100]int matrix1 = new [10000]int();
+[100]int matrix2 = new [10000]int();
+[100]int ans = new [10000]int();
 int i;
 for(i=0;i<h1*w1;i++){
     int tmp;
@@ -12,7 +14,6 @@ for(i=0;i<h1*w1;i++){
 int h2;
 int w2;
 scanf("%d %d",h2,w2);
-[1000]int matrix2 = new [1000]int();
 for(i=0;i<h2*w2;i++){
     int tmp;
     scanf("%d",tmp);
@@ -23,7 +24,6 @@ if (w1 != h2) {
 	printf("Incompatible Dimensions\n");
 }
 else{
-    [1000]int ans = new [1000]int();
     for(i=0;i<h1;i++){
         int j;
         for(j=0;j<w2;j++){
