@@ -5,9 +5,13 @@ set (CMAKE_CXX_STANDARD 14)
 set (CMAKE_CXX_FLAGS '-g')
 set (CMAKE_BUILD_TYPE Debug)
 
+SET(LLVM_DIR /usr/local/opt/llvm/lib/cmake/llvm)
+SET(CMAKE_PREFIX_PATH /usr/local/opt/llvm/lib/cmake/)
+
 find_package(FLEX REQUIRED)
 find_package(BISON REQUIRED)
 find_package(LLVM REQUIRED)
+
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
