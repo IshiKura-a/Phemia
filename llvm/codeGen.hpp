@@ -480,7 +480,6 @@ llvm::Value *NBlock::codeGen(ARStack &context) {
         std::cout << "Generating code for " << typeid(statement).name() << std::endl;
         last = (statement).codeGen(context);
     }
-    std::cout << "Creating block" << std::endl;
     return last;
 }
 
@@ -675,16 +674,12 @@ llvm::Value *NIfStatement::codeGen(ARStack &context) {
     context.builder.SetInsertPoint(thenBB);
     this->thenBlock->codeGen(context);
 
-    if (thenBB->getTerminator() == nullptr) {
-        context.builder.CreateBr(afterBB);
-    }
+    context.builder.CreateBr(afterBB);
 
     if (elseBlock) {
         context.builder.SetInsertPoint(elseBB);
         elseBlock->codeGen(context);
-        if (elseBB->getTerminator() == nullptr) {
-            context.builder.CreateBr(afterBB);
-        }
+        context.builder.CreateBr(afterBB);
     }
 
     context.builder.SetInsertPoint(afterBB);
