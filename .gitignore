@@ -15,3 +15,5 @@ Output
 **/*.cbp
 **/*.bc
 **/*.o
+**/darwin-amd64
+**/Quicksort

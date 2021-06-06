@@ -326,10 +326,10 @@ llvm::Value *NBinaryOperator::codeGen(ARStack &context) {
         (!R->getType()->isIntegerTy())) {
         isFP = true;
         if (R->getType()->isIntegerTy()) {
-            R = context.builder.CreateUIToFP(R, llvm::Type::getDoubleTy(context.llvmContext), "FTMP");
+            R = context.builder.CreateSIToFP(R, llvm::Type::getDoubleTy(context.llvmContext), "FTMP");
         }
         if (L->getType()->isIntegerTy()) {
-            L = context.builder.CreateUIToFP(L, llvm::Type::getDoubleTy(context.llvmContext), "FTMP");
+            L = context.builder.CreateSIToFP(L, llvm::Type::getDoubleTy(context.llvmContext), "FTMP");
         }
     }
 
@@ -358,13 +358,13 @@ llvm::Value *NBinaryOperator::codeGen(ARStack &context) {
             if (isFP) std::cerr << "Compute XOR on FP!\n";
             return isFP ? nullptr : context.builder.CreateXor(L, R, "XOR");
         case LT:
-            return isFP ? context.builder.CreateFCmpULT(L, R, "FLT") : context.builder.CreateICmpULT(L, R, "LT");
+            return isFP ? context.builder.CreateFCmpULT(L, R, "FLT") : context.builder.CreateICmpSLT(L, R, "LT");
         case LE:
-            return isFP ? context.builder.CreateFCmpULE(L, R, "FLE") : context.builder.CreateICmpULE(L, R, "LE");
+            return isFP ? context.builder.CreateFCmpULE(L, R, "FLE") : context.builder.CreateICmpSLE(L, R, "LE");
         case GT:
-            return isFP ? context.builder.CreateFCmpUGT(L, R, "FGT") : context.builder.CreateICmpUGT(L, R, "GT");
+            return isFP ? context.builder.CreateFCmpUGT(L, R, "FGT") : context.builder.CreateICmpSGT(L, R, "GT");
         case GE:
-            return isFP ? context.builder.CreateFCmpUGE(L, R, "FGE") : context.builder.CreateICmpUGE(L, R, "GE");
+            return isFP ? context.builder.CreateFCmpUGE(L, R, "FGE") : context.builder.CreateICmpSGE(L, R, "GE");
         case EQ:
             return isFP ? context.builder.CreateFCmpUEQ(L, R, "FEQ") : context.builder.CreateICmpEQ(L, R, "EQ");
         case NE:
@@ -724,7 +724,7 @@ llvm::Value *NWhileStatement::codeGen(ARStack &context) {
     llvm::BasicBlock *whileCond = llvm::BasicBlock::Create(context.llvmContext, "whileCond", function);
     llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterWhile", function);
 
-    context.builder.CreateBr(whileLoop);
+    context.builder.CreateBr(whileCond);
     context.inLoop++;
     auto prevMerge = context.curMerge;
     auto prevCond = context.curCond;
