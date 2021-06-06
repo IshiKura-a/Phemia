@@ -1,2 +1,35 @@
-12
-22
+CS101|3||
+CS155|4|CS101|
+CS245|3|CS101|
+CS265|4|CS155|
+CS288|4|CS245|
+CS300|3|CS265|
+CS345|3|CS245|
+CS350|3|CS300,CS345|
+CS351|4|CS155|
+CS380|3|CS288,CS351|
+CS390|3|CS300|
+CS433|3|CS300|
+CS440|3|CS265|
+CS445|3|Senior Standing|
+CS480|3|CS351|
+CS495|1|CS445|
+CS499|3|CS445|
+CS591|3|CS300,CS380,CS480;CS300,CS503;CS500,CS503|
+CY201|4|CS155|
+IU315|3||
+MA139|3|ACT24;MA116;MA137|
+MA223|3|ACT24;MA116|
+MA464|3|MA223;MA250;MA338;MA345;MA443|
+CS3xx+|6||
+Science|9||
+Social and Behavioral Sciences|6||
+Constitution Requirement|3||
+Written Communication|6||
+Oral Communication|3||
+Natural Sciences|7||
+Mathematics|3||
+Humanities and Fine Arts|9||
+Additional Requirements|5||
+Senior Standing|0||
+ACT24|0||

@@ -18,3 +18,5 @@ Output
 **/darwin-amd64
 **/Quicksort
 **/MatrixMul
+**/Course
+**/*.ll
