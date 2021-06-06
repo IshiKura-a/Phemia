@@ -1,50 +1,58 @@
-#define _CRT_SECURE_NO_WARNINGS
-#include<stdio.h>
-#include<stdlib.h>
+int h1;
+int w1;
+scanf("%d %d",h1,w1);
+[1000]int matrix1 = new [1000]int();
+int i;
+for(i=0;i<h1*w1;i++){
+    int tmp;
+    scanf("%d",tmp);
+    matrix1[i] = tmp;
+}
 
-int main() {
-	int h1, w1;
-	scanf("%d %d", &h1, &w1);
-	int * matrix1 = (int*)malloc(sizeof(int)*h1*w1);
-	for (int i = 0; i < h1*w1; i++) {
-		scanf("%d", &matrix1[i]);
-	}
+int h2;
+int w2;
+scanf("%d %d",h2,w2);
+[1000]int matrix2 = new [1000]int();
+for(i=0;i<h2*w2;i++){
+    int tmp;
+    scanf("%d",tmp);
+    matrix2[i] = tmp;
+}
 
-	int h2, w2;
-	scanf("%d %d", &h2, &w2);
-	int * matrix2 = (int*)malloc(sizeof(int)*h2*w2);
-	for (int i = 0; i < h2*w2; i++) {
-		scanf("%d", &matrix2[i]);
-	}
-
-	if (w1 != h2) {
-		printf("Incompatible Dimensions\n");
-		return 0;
-	}
-	
-	int* ans = (int*)malloc(sizeof(int)*h1*w2);
-	for (int i = 0; i < h1; i++) {
-		for (int j = 0; j < w2; j++) {
-			int sum = 0;
-			for (int m = 0; m < w1; m++) {
-				sum = sum + matrix1[i*w1 + m] * matrix2[m*w2 + j];
-			}
-			ans[i*w2 + j] = sum;
-		}
-	}
-	for (int i = 0; i < h1; i++) {
-		for (int j = 0; j < w2; j++) {
-			int length = 0;
-			int printTarget = ans[i*w2 + j];
+if (w1 != h2) {
+	printf("Incompatible Dimensions\n");
+}
+else{
+    [1000]int ans = new [1000]int();
+    for(i=0;i<h1;i++){
+        int j;
+        for(j=0;j<w2;j++){
+            int sum;
+            sum=0;
+            int m;
+            for(m=0;m<w1;m++){
+                sum=sum+matrix1[i*w1+m]*matrix2[m*w2 + j];
+            }
+            ans[i*w2+j]=sum;
+        }
+    }
+    for (i = 0; i < h1; i++) {
+        int j;
+		for (j = 0; j < w2; j++) {
+			int length;
+            length = 0;
+			int printTarget;
+            printTarget = ans[i*w2 + j];
 			if (printTarget < 0){
 				length++;
-				printTarget = -printTarget;
+				printTarget = 0-printTarget;
 			}
 			while (printTarget > 0) {
 				printTarget = printTarget / 10;
 				length++;
 			}
-			for (int m = 0; m < 10 - length; m++) {
+
+			for (int m = 0; m < (10 - length); m++) {
 				printf(" ");
 			}
 			printf("%d", ans[i*w2 + j]);
