@@ -132,23 +132,23 @@ declParamList : idDecl { $$ = new VariableList(); $$->push_back($1); }
     ;
 
 exp : expr
-    | exp GE expr { $$ = new NBinaryOperator(*$1, $2, *$3); }
-    | exp GT expr { $$ = new NBinaryOperator(*$1, $2, *$3); }
-    | exp LE expr { $$ = new NBinaryOperator(*$1, $2, *$3); }
-    | exp LT expr { $$ = new NBinaryOperator(*$1, $2, *$3); }
-    | exp NE expr { $$ = new NBinaryOperator(*$1, $2, *$3); }
-    | exp EQ expr { $$ = new NBinaryOperator(*$1, $2, *$3); }
+    | exp GE expr { $$ = new NBinaryOperator($1, $2, $3); }
+    | exp GT expr { $$ = new NBinaryOperator($1, $2, $3); }
+    | exp LE expr { $$ = new NBinaryOperator($1, $2, $3); }
+    | exp LT expr { $$ = new NBinaryOperator($1, $2, $3); }
+    | exp NE expr { $$ = new NBinaryOperator($1, $2, $3); }
+    | exp EQ expr { $$ = new NBinaryOperator($1, $2, $3); }
     ;
-expr : expr PLUS term { $$ = new NBinaryOperator(*$1, $2, *$3); }
-    | expr MINUS term { $$ = new NBinaryOperator(*$1, $2, *$3); }
-    | expr OR term { $$ = new NBinaryOperator(*$1, $2, *$3); }
+expr : expr PLUS term { $$ = new NBinaryOperator($1, $2, $3); }
+    | expr MINUS term { $$ = new NBinaryOperator($1, $2, $3); }
+    | expr OR term { $$ = new NBinaryOperator($1, $2, $3); }
     | term { $$ = $1; }
     ;
-term : term MUL factor { $$ = new NBinaryOperator(*$1, $2, *$3); }
-    | term DIV factor { $$ = new NBinaryOperator(*$1, $2, *$3); }
-    | term AND factor { $$ = new NBinaryOperator(*$1, $2, *$3); }
-    | term MOD factor { $$ = new NBinaryOperator(*$1, $2, *$3); }
-    | term XOR factor { $$ = new NBinaryOperator(*$1, $2, *$3); }
+term : term MUL factor { $$ = new NBinaryOperator($1, $2, $3); }
+    | term DIV factor { $$ = new NBinaryOperator($1, $2, $3); }
+    | term AND factor { $$ = new NBinaryOperator($1, $2, $3); }
+    | term MOD factor { $$ = new NBinaryOperator($1, $2, $3); }
+    | term XOR factor { $$ = new NBinaryOperator($1, $2, $3); }
     | factor { $$ = $1; }
     ;
 factor : literal { $$ = $1; }
@@ -156,12 +156,12 @@ factor : literal { $$ = $1; }
     | call { $$ = $1; }
     | assign { $$ = $1; }
     | LSB exp RSB { $$ = $2; }
-    | NOT factor { $$ = new NUnaryOperator($1, *$2); }
-    | MINUS factor { $$ = new NUnaryOperator($1, *$2); }
-    | INC factor { $$ = new NIncOperator($1, *$2, true); }
-    | DEC factor { $$ = new NDecOperator($1, *$2, true); }
-    | factor INC { $$ = new NIncOperator($2, *$1, false); }
-    | factor DEC { $$ = new NDecOperator($2, *$1, false); }
+    | NOT factor { $$ = new NUnaryOperator($1, $2); }
+    | MINUS factor { $$ = new NUnaryOperator($1, $2); }
+    | INC id { $$ = new NIncOperator($1, $2, true); }
+    | DEC id { $$ = new NDecOperator($1, $2, true); }
+    | id INC { $$ = new NIncOperator($2, $1, false); }
+    | id DEC { $$ = new NDecOperator($2, $1, false); }
     | id DOT id {}
     | id DOT call {}
     | id arrayIndices { $$ = new NArrayElement(*$1, *$2); }

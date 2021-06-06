@@ -22,7 +22,7 @@ typedef std::vector<std::string *> ArrayDimension;
 
 class Node {
 public:
-    virtual ~Node() {}
+    virtual ~Node() = default;
 
     virtual llvm::Value *codeGen(ARStack &context) { return nullptr; }
 };
@@ -50,7 +50,7 @@ class NInteger : public NExpression {
 public:
     int32_t value;
 
-    NInteger(const std::string &value) : value(std::strtol(value.c_str(), nullptr, 10)) {}
+    explicit NInteger(const std::string &value) : value(std::strtol(value.c_str(), nullptr, 10)) {}
 
     llvm::Value *codeGen(ARStack &context) override;
     int getDType() override;
@@ -127,10 +127,10 @@ public:
 class NBinaryOperator : public NExpression {
 public:
     int op;
-    NExpression &lhs;
-    NExpression &rhs;
+    NExpression *lhs;
+    NExpression *rhs;
 
-    NBinaryOperator(NExpression &lhs, int op, NExpression &rhs) : lhs(lhs), rhs(rhs), op(op) {}
+    NBinaryOperator(NExpression *lhs, int op, NExpression *rhs) : lhs(lhs), rhs(rhs), op(op) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
@@ -138,9 +138,9 @@ public:
 class NUnaryOperator : public NExpression {
 public:
     int op;
-    NExpression &rhs;
+    NExpression *rhs;
 
-    NUnaryOperator(int op, NExpression &rhs) : op(op), rhs(rhs) {}
+    NUnaryOperator(int op, NExpression *rhs) : op(op), rhs(rhs) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
@@ -264,7 +264,7 @@ public:
 
     NArrayType(ArrayDimension *arrDim, NIdentifier &id) : arrDim(arrDim), NIdentifier(id) {}
 
-    ArrayDimension *getArrayDim() { return arrDim; }
+    ArrayDimension *getArrayDim() override { return arrDim; }
 };
 
 class NIfStatement : public NStatement {
@@ -306,7 +306,7 @@ class NIncOperator : public NUnaryOperator {
 public:
     bool isPrefix;
 
-    NIncOperator(int op, NExpression &rhs, bool isPrefix) : NUnaryOperator(op, rhs), isPrefix(isPrefix) {}
+    NIncOperator(int op, NExpression *rhs, bool isPrefix) : NUnaryOperator(op, rhs), isPrefix(isPrefix) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
@@ -315,7 +315,7 @@ class NDecOperator : public NUnaryOperator {
 public:
     bool isPrefix;
 
-    NDecOperator(int op, NExpression &rhs, bool isPrefix) : NUnaryOperator(op, rhs), isPrefix(isPrefix) {}
+    NDecOperator(int op, NExpression *rhs, bool isPrefix) : NUnaryOperator(op, rhs), isPrefix(isPrefix) {}
 
     llvm::Value *codeGen(ARStack &context) override;
 };
