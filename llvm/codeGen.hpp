@@ -305,10 +305,11 @@ llvm::Value *NArray::codeGen(ARStack &context) {
     } else {
         auto *arrSize = new std::vector<uint32_t>();
         uint64_t size = util::calArrayDim(arrDim, arrSize);
-        llvm::Value *sizeValue = NInteger(std::to_string(size)).codeGen(context);
         auto arrType = llvm::ArrayType::get(dType, size);
-        auto alloc = context.builder.CreateAlloca(arrType, sizeValue, "");
-        return context.builder.CreateBitCast(alloc, dType->getPointerTo());
+        auto *val= new llvm::GlobalVariable(*context.module, arrType, false, llvm::GlobalValue::CommonLinkage, 0, "arr");
+        auto *constArr = llvm::ConstantAggregateZero::get(arrType);
+        val->setInitializer(constArr);
+        return context.builder.CreateBitCast(val, dType->getPointerTo());
     }
 }
 
