@@ -70,6 +70,9 @@ public:
     llvm::LLVMContext llvmContext;
     llvm::IRBuilder<> builder;
     llvm::Module *module;
+    llvm::BasicBlock *curMerge = nullptr;
+    llvm::BasicBlock *curCond = nullptr;
+    int inLoop = 0;
 
     ARStack() : builder(llvmContext) { module = new llvm::Module("main", llvmContext); }
 
@@ -564,7 +567,6 @@ llvm::Value *NFunctionDeclaration::codeGen(ARStack &context) {
         if (alloc) {
             context.builder.CreateStore(argumentValue, alloc, false);
         } else {
-            PRINT(argumentValue);
             context.current()->localVal[item->id.name]->value = argumentValue;
         }
     }
@@ -659,8 +661,10 @@ llvm::Value *NIfStatement::codeGen(ARStack &context) {
     llvm::Function *function = context.builder.GetInsertBlock()->getParent(); // the function where if statement is in
 
     llvm::BasicBlock *thenBB = llvm::BasicBlock::Create(context.llvmContext, "then", function);
-    llvm::BasicBlock *elseBB = llvm::BasicBlock::Create(context.llvmContext, "else");
-    llvm::BasicBlock *afterBB = llvm::BasicBlock::Create(context.llvmContext, "afterIf");
+    llvm::BasicBlock *elseBB;
+    if(elseBlock)
+        elseBB = llvm::BasicBlock::Create(context.llvmContext, "else", function);
+    llvm::BasicBlock *afterBB = llvm::BasicBlock::Create(context.llvmContext, "afterIf", function);
 
     if (elseBlock) {
         context.builder.CreateCondBr(condValue, thenBB, elseBB);
@@ -669,35 +673,21 @@ llvm::Value *NIfStatement::codeGen(ARStack &context) {
     }
 
     context.builder.SetInsertPoint(thenBB);
-
-    context.push(thenBB);
-
     this->thenBlock->codeGen(context);
-
-    context.pop();
-
-    thenBB = context.builder.GetInsertBlock();
 
     if (thenBB->getTerminator() == nullptr) {
         context.builder.CreateBr(afterBB);
     }
 
     if (elseBlock) {
-        function->getBasicBlockList().push_back(elseBB);
         context.builder.SetInsertPoint(elseBB);
-
-        context.push(thenBB);
-
         elseBlock->codeGen(context);
-
-        context.pop();
-
-        context.builder.CreateBr(afterBB);
+        if (elseBB->getTerminator() == nullptr) {
+            context.builder.CreateBr(afterBB);
+        }
     }
 
-    function->getBasicBlockList().push_back(afterBB);
     context.builder.SetInsertPoint(afterBB);
-
     return nullptr;
 }
 
@@ -705,31 +695,30 @@ llvm::Value *NForStatement::codeGen(ARStack &context) {
     llvm::Function *function = context.builder.GetInsertBlock()->getParent();
 
     llvm::BasicBlock *forLoop = llvm::BasicBlock::Create(context.llvmContext, "forLoop", function);
-    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterFor");
+    llvm::BasicBlock *forCond = llvm::BasicBlock::Create(context.llvmContext, "forCon", function);
+    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterFor", function);
 
     if (init)
         init->codeGen(context);
+    context.builder.CreateBr(forCond);
+    context.inLoop++;
+    auto prevMerge = context.curMerge;
+    auto prevCond = context.curCond;
 
-    llvm::Value *condValue = condition->codeGen(context);
-    condValue = context.castToBoolean(condValue);
-
-    context.builder.CreateCondBr(condValue, forLoop, after);
     context.builder.SetInsertPoint(forLoop);
-    context.push(forLoop, new LoopInfo(condition, inc, forLoop, after));
     block->codeGen(context);
-    context.pop();
+    if(inc) inc->codeGen(context);
+    context.builder.CreateBr(forCond);
 
-    if (inc) {
-        inc->codeGen(context);
-    }
+    context.builder.SetInsertPoint(forCond);
+    auto condVal = context.castToBoolean(condition->codeGen(context));
+    context.builder.CreateCondBr(condVal, forLoop, after);
 
-    condValue = condition->codeGen(context);
-    condValue = context.castToBoolean(condValue);
-    context.builder.CreateCondBr(condValue, forLoop, after);
-
-    function->getBasicBlockList().push_back(after);
     context.builder.SetInsertPoint(after);
 
+    context.curMerge = prevMerge;
+    context.curCond = prevCond;
+    context.inLoop--;
     return nullptr;
 }
 
@@ -737,24 +726,27 @@ llvm::Value *NWhileStatement::codeGen(ARStack &context) {
     llvm::Function *function = context.builder.GetInsertBlock()->getParent();
 
     llvm::BasicBlock *whileLoop = llvm::BasicBlock::Create(context.llvmContext, "whileLoop", function);
-    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterWhile");
+    llvm::BasicBlock *whileCond = llvm::BasicBlock::Create(context.llvmContext, "whileCond", function);
+    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterWhile", function);
 
-    llvm::Value *condValue = condition->codeGen(context);
-    condValue = context.castToBoolean(condValue);
+    context.builder.CreateBr(whileLoop);
+    context.inLoop++;
+    auto prevMerge = context.curMerge;
+    auto prevCond = context.curCond;
 
-    context.builder.CreateCondBr(condValue, whileLoop, after);
     context.builder.SetInsertPoint(whileLoop);
-    context.push(whileLoop, new LoopInfo(condition, nullptr, whileLoop, after));
     block->codeGen(context);
-    context.pop();
+    context.builder.CreateBr(whileCond);
 
-    condValue = condition->codeGen(context);
-    condValue = context.castToBoolean(condValue);
-    context.builder.CreateCondBr(condValue, whileLoop, after);
+    context.builder.SetInsertPoint(whileCond);
+    auto condVal = context.castToBoolean(condition->codeGen(context));
+    context.builder.CreateCondBr(condVal, whileLoop, after);
 
-    function->getBasicBlockList().push_back(after);
     context.builder.SetInsertPoint(after);
 
+    context.curMerge = prevMerge;
+    context.curCond = prevCond;
+    context.inLoop--;
     return nullptr;
 }
 
@@ -762,44 +754,44 @@ llvm::Value *NDoWhileStatement::codeGen(ARStack &context) {
     llvm::Function *function = context.builder.GetInsertBlock()->getParent();
 
     llvm::BasicBlock *whileLoop = llvm::BasicBlock::Create(context.llvmContext, "doWhileLoop", function);
-    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterDoWhile");
+    llvm::BasicBlock *whileCond = llvm::BasicBlock::Create(context.llvmContext, "doWhileCond", function);
+    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterDoWhile", function);
+
+    context.builder.CreateBr(whileLoop);
+    context.inLoop++;
+    auto prevMerge = context.curMerge;
+    auto prevCond = context.curCond;
 
     context.builder.SetInsertPoint(whileLoop);
-    context.push(whileLoop, new LoopInfo(condition, nullptr, whileLoop, after));
     block->codeGen(context);
-    context.pop();
+    context.builder.CreateBr(whileCond);
 
-    llvm::Value *condValue = condition->codeGen(context);
-    condValue = context.castToBoolean(condValue);
-    context.builder.CreateCondBr(condValue, whileLoop, after);
+    context.builder.SetInsertPoint(whileCond);
+    auto condVal = context.castToBoolean(condition->codeGen(context));
+    context.builder.CreateCondBr(condVal, whileLoop, after);
 
-    function->getBasicBlockList().push_back(after);
     context.builder.SetInsertPoint(after);
 
+    context.curMerge = prevMerge;
+    context.curCond = prevCond;
+    context.inLoop--;
     return nullptr;
 }
 
 llvm::Value *NBreakStatement::codeGen(ARStack &context) {
-    LoopInfo *info = context.currentLoop();
-    if (info) {
-        context.builder.CreateBr(info->after);
+    if (context.inLoop) {
+        context.builder.CreateBr(context.curMerge);
     } else {
-        std::cerr << "Use break outside loop!\n";
+        std::cerr << "Use break outsize loop!\n";
     }
     return nullptr;
 }
 
 llvm::Value *NContinueStatement::codeGen(ARStack &context) {
-    LoopInfo *info = context.currentLoop();
-    if (info) {
-        if (info->inc) {
-            info->inc->codeGen(context);
-        }
-        auto cond = info->cond->codeGen(context);
-        cond->print(llvm::outs());
-        context.builder.CreateCondBr(cond, info->loop, info->after);
+    if (context.inLoop) {
+        context.builder.CreateBr(context.curCond);
     } else {
-        std::cerr << "Use continue outside loop!\n";
+        std::cerr << "Use continue outsize loop!\n";
     }
     return nullptr;
 }
