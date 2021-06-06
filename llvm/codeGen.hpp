@@ -70,6 +70,9 @@ public:
     llvm::LLVMContext llvmContext;
     llvm::IRBuilder<> builder;
     llvm::Module *module;
+    llvm::BasicBlock *curMerge = nullptr;
+    llvm::BasicBlock *curCond = nullptr;
+    int inLoop = 0;
 
     ARStack() : builder(llvmContext) { module = new llvm::Module("main", llvmContext); }
 
@@ -305,10 +308,11 @@ llvm::Value *NArray::codeGen(ARStack &context) {
     } else {
         auto *arrSize = new std::vector<uint32_t>();
         uint64_t size = util::calArrayDim(arrDim, arrSize);
-        llvm::Value *sizeValue = NInteger(std::to_string(size)).codeGen(context);
         auto arrType = llvm::ArrayType::get(dType, size);
-        auto alloc = context.builder.CreateAlloca(arrType, sizeValue, "");
-        return context.builder.CreateBitCast(alloc, dType->getPointerTo());
+        auto *val= new llvm::GlobalVariable(*context.module, arrType, false, llvm::GlobalValue::CommonLinkage, 0, "arr");
+        auto *constArr = llvm::ConstantAggregateZero::get(arrType);
+        val->setInitializer(constArr);
+        return context.builder.CreateBitCast(val, dType->getPointerTo());
     }
 }
 
@@ -322,10 +326,10 @@ llvm::Value *NBinaryOperator::codeGen(ARStack &context) {
         (!R->getType()->isIntegerTy())) {
         isFP = true;
         if (R->getType()->isIntegerTy()) {
-            R = context.builder.CreateUIToFP(R, llvm::Type::getDoubleTy(context.llvmContext), "FTMP");
+            R = context.builder.CreateSIToFP(R, llvm::Type::getDoubleTy(context.llvmContext), "FTMP");
         }
         if (L->getType()->isIntegerTy()) {
-            L = context.builder.CreateUIToFP(L, llvm::Type::getDoubleTy(context.llvmContext), "FTMP");
+            L = context.builder.CreateSIToFP(L, llvm::Type::getDoubleTy(context.llvmContext), "FTMP");
         }
     }
 
@@ -354,13 +358,13 @@ llvm::Value *NBinaryOperator::codeGen(ARStack &context) {
             if (isFP) std::cerr << "Compute XOR on FP!\n";
             return isFP ? nullptr : context.builder.CreateXor(L, R, "XOR");
         case LT:
-            return isFP ? context.builder.CreateFCmpULT(L, R, "FLT") : context.builder.CreateICmpULT(L, R, "LT");
+            return isFP ? context.builder.CreateFCmpULT(L, R, "FLT") : context.builder.CreateICmpSLT(L, R, "LT");
         case LE:
-            return isFP ? context.builder.CreateFCmpULE(L, R, "FLE") : context.builder.CreateICmpULE(L, R, "LE");
+            return isFP ? context.builder.CreateFCmpULE(L, R, "FLE") : context.builder.CreateICmpSLE(L, R, "LE");
         case GT:
-            return isFP ? context.builder.CreateFCmpUGT(L, R, "FGT") : context.builder.CreateICmpUGT(L, R, "GT");
+            return isFP ? context.builder.CreateFCmpUGT(L, R, "FGT") : context.builder.CreateICmpSGT(L, R, "GT");
         case GE:
-            return isFP ? context.builder.CreateFCmpUGE(L, R, "FGE") : context.builder.CreateICmpUGE(L, R, "GE");
+            return isFP ? context.builder.CreateFCmpUGE(L, R, "FGE") : context.builder.CreateICmpSGE(L, R, "GE");
         case EQ:
             return isFP ? context.builder.CreateFCmpUEQ(L, R, "FEQ") : context.builder.CreateICmpEQ(L, R, "EQ");
         case NE:
@@ -476,7 +480,6 @@ llvm::Value *NBlock::codeGen(ARStack &context) {
         std::cout << "Generating code for " << typeid(statement).name() << std::endl;
         last = (statement).codeGen(context);
     }
-    std::cout << "Creating block" << std::endl;
     return last;
 }
 
@@ -486,11 +489,17 @@ llvm::Value *NExpressionStatement::codeGen(ARStack &context) {
 }
 
 llvm::Value *NReturnStatement::codeGen(ARStack &context) {
-    std::cout << "Generating return code for " << typeid(expression).name() << std::endl;
-    llvm::Value *retVal = expression.codeGen(context);
-    context.setCurrentReturnValue(retVal);
-    context.builder.CreateRet(context.getCurrentReturnValue());
-    return retVal;
+    if(expression) {
+        std::cout << "Generating return code for " << typeid(expression).name() << std::endl;
+        llvm::Value *retVal = expression->codeGen(context);
+        context.setCurrentReturnValue(retVal);
+        context.builder.CreateRet(context.getCurrentReturnValue());
+        return retVal;
+    }
+    else {
+        return context.builder.CreateRetVoid();
+    }
+
 }
 
 llvm::Value *NVariableDeclaration::codeGen(ARStack &context) {
@@ -557,7 +566,6 @@ llvm::Value *NFunctionDeclaration::codeGen(ARStack &context) {
         if (alloc) {
             context.builder.CreateStore(argumentValue, alloc, false);
         } else {
-            PRINT(argumentValue);
             context.current()->localVal[item->id.name]->value = argumentValue;
         }
     }
@@ -652,8 +660,10 @@ llvm::Value *NIfStatement::codeGen(ARStack &context) {
     llvm::Function *function = context.builder.GetInsertBlock()->getParent(); // the function where if statement is in
 
     llvm::BasicBlock *thenBB = llvm::BasicBlock::Create(context.llvmContext, "then", function);
-    llvm::BasicBlock *elseBB = llvm::BasicBlock::Create(context.llvmContext, "else");
-    llvm::BasicBlock *afterBB = llvm::BasicBlock::Create(context.llvmContext, "afterIf");
+    llvm::BasicBlock *elseBB;
+    if(elseBlock)
+        elseBB = llvm::BasicBlock::Create(context.llvmContext, "else", function);
+    llvm::BasicBlock *afterBB = llvm::BasicBlock::Create(context.llvmContext, "afterIf", function);
 
     if (elseBlock) {
         context.builder.CreateCondBr(condValue, thenBB, elseBB);
@@ -662,35 +672,17 @@ llvm::Value *NIfStatement::codeGen(ARStack &context) {
     }
 
     context.builder.SetInsertPoint(thenBB);
-
-    context.push(thenBB);
-
     this->thenBlock->codeGen(context);
 
-    context.pop();
-
-    thenBB = context.builder.GetInsertBlock();
-
-    if (thenBB->getTerminator() == nullptr) {
-        context.builder.CreateBr(afterBB);
-    }
+    context.builder.CreateBr(afterBB);
 
     if (elseBlock) {
-        function->getBasicBlockList().push_back(elseBB);
         context.builder.SetInsertPoint(elseBB);
-
-        context.push(thenBB);
-
         elseBlock->codeGen(context);
-
-        context.pop();
-
         context.builder.CreateBr(afterBB);
     }
 
-    function->getBasicBlockList().push_back(afterBB);
     context.builder.SetInsertPoint(afterBB);
-
     return nullptr;
 }
 
@@ -698,31 +690,30 @@ llvm::Value *NForStatement::codeGen(ARStack &context) {
     llvm::Function *function = context.builder.GetInsertBlock()->getParent();
 
     llvm::BasicBlock *forLoop = llvm::BasicBlock::Create(context.llvmContext, "forLoop", function);
-    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterFor");
+    llvm::BasicBlock *forCond = llvm::BasicBlock::Create(context.llvmContext, "forCon", function);
+    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterFor", function);
 
     if (init)
         init->codeGen(context);
+    context.builder.CreateBr(forCond);
+    context.inLoop++;
+    auto prevMerge = context.curMerge;
+    auto prevCond = context.curCond;
 
-    llvm::Value *condValue = condition->codeGen(context);
-    condValue = context.castToBoolean(condValue);
-
-    context.builder.CreateCondBr(condValue, forLoop, after);
     context.builder.SetInsertPoint(forLoop);
-    context.push(forLoop, new LoopInfo(condition, inc, forLoop, after));
     block->codeGen(context);
-    context.pop();
+    if(inc) inc->codeGen(context);
+    context.builder.CreateBr(forCond);
 
-    if (inc) {
-        inc->codeGen(context);
-    }
+    context.builder.SetInsertPoint(forCond);
+    auto condVal = context.castToBoolean(condition->codeGen(context));
+    context.builder.CreateCondBr(condVal, forLoop, after);
 
-    condValue = condition->codeGen(context);
-    condValue = context.castToBoolean(condValue);
-    context.builder.CreateCondBr(condValue, forLoop, after);
-
-    function->getBasicBlockList().push_back(after);
     context.builder.SetInsertPoint(after);
 
+    context.curMerge = prevMerge;
+    context.curCond = prevCond;
+    context.inLoop--;
     return nullptr;
 }
 
@@ -730,24 +721,27 @@ llvm::Value *NWhileStatement::codeGen(ARStack &context) {
     llvm::Function *function = context.builder.GetInsertBlock()->getParent();
 
     llvm::BasicBlock *whileLoop = llvm::BasicBlock::Create(context.llvmContext, "whileLoop", function);
-    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterWhile");
+    llvm::BasicBlock *whileCond = llvm::BasicBlock::Create(context.llvmContext, "whileCond", function);
+    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterWhile", function);
 
-    llvm::Value *condValue = condition->codeGen(context);
-    condValue = context.castToBoolean(condValue);
+    context.builder.CreateBr(whileCond);
+    context.inLoop++;
+    auto prevMerge = context.curMerge;
+    auto prevCond = context.curCond;
 
-    context.builder.CreateCondBr(condValue, whileLoop, after);
     context.builder.SetInsertPoint(whileLoop);
-    context.push(whileLoop, new LoopInfo(condition, nullptr, whileLoop, after));
     block->codeGen(context);
-    context.pop();
+    context.builder.CreateBr(whileCond);
 
-    condValue = condition->codeGen(context);
-    condValue = context.castToBoolean(condValue);
-    context.builder.CreateCondBr(condValue, whileLoop, after);
+    context.builder.SetInsertPoint(whileCond);
+    auto condVal = context.castToBoolean(condition->codeGen(context));
+    context.builder.CreateCondBr(condVal, whileLoop, after);
 
-    function->getBasicBlockList().push_back(after);
     context.builder.SetInsertPoint(after);
 
+    context.curMerge = prevMerge;
+    context.curCond = prevCond;
+    context.inLoop--;
     return nullptr;
 }
 
@@ -755,44 +749,44 @@ llvm::Value *NDoWhileStatement::codeGen(ARStack &context) {
     llvm::Function *function = context.builder.GetInsertBlock()->getParent();
 
     llvm::BasicBlock *whileLoop = llvm::BasicBlock::Create(context.llvmContext, "doWhileLoop", function);
-    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterDoWhile");
+    llvm::BasicBlock *whileCond = llvm::BasicBlock::Create(context.llvmContext, "doWhileCond", function);
+    llvm::BasicBlock *after = llvm::BasicBlock::Create(context.llvmContext, "afterDoWhile", function);
+
+    context.builder.CreateBr(whileLoop);
+    context.inLoop++;
+    auto prevMerge = context.curMerge;
+    auto prevCond = context.curCond;
 
     context.builder.SetInsertPoint(whileLoop);
-    context.push(whileLoop, new LoopInfo(condition, nullptr, whileLoop, after));
     block->codeGen(context);
-    context.pop();
+    context.builder.CreateBr(whileCond);
 
-    llvm::Value *condValue = condition->codeGen(context);
-    condValue = context.castToBoolean(condValue);
-    context.builder.CreateCondBr(condValue, whileLoop, after);
+    context.builder.SetInsertPoint(whileCond);
+    auto condVal = context.castToBoolean(condition->codeGen(context));
+    context.builder.CreateCondBr(condVal, whileLoop, after);
 
-    function->getBasicBlockList().push_back(after);
     context.builder.SetInsertPoint(after);
 
+    context.curMerge = prevMerge;
+    context.curCond = prevCond;
+    context.inLoop--;
     return nullptr;
 }
 
 llvm::Value *NBreakStatement::codeGen(ARStack &context) {
-    LoopInfo *info = context.currentLoop();
-    if (info) {
-        context.builder.CreateBr(info->after);
+    if (context.inLoop) {
+        context.builder.CreateBr(context.curMerge);
     } else {
-        std::cerr << "Use break outside loop!\n";
+        std::cerr << "Use break outsize loop!\n";
     }
     return nullptr;
 }
 
 llvm::Value *NContinueStatement::codeGen(ARStack &context) {
-    LoopInfo *info = context.currentLoop();
-    if (info) {
-        if (info->inc) {
-            info->inc->codeGen(context);
-        }
-        auto cond = info->cond->codeGen(context);
-        cond->print(llvm::outs());
-        context.builder.CreateCondBr(cond, info->loop, info->after);
+    if (context.inLoop) {
+        context.builder.CreateBr(context.curCond);
     } else {
-        std::cerr << "Use continue outside loop!\n";
+        std::cerr << "Use continue outsize loop!\n";
     }
     return nullptr;
 }

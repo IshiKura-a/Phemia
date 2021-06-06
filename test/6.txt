@@ -14,7 +14,7 @@ function test(int i, char c): void {
 int i;
 char c;
 int j;
-for (j=0; j<=3git ; j++) {
+for (j=0; j<=3 ; j++) {
     scanf("%d %c", i, c);
     test(i, c);
 }
