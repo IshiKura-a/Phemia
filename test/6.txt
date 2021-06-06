@@ -1,0 +1,20 @@
+//[10]char s = new [10]char();
+//scanf("%s", s);
+//printf("%s\n", s);
+
+
+function test(int i, char c): void {
+    if (i == 0) {
+        printf("%c\n", c);
+    } else {
+        printf("%d\n", i);
+    }
+};
+
+int i;
+char c;
+int j;
+for (j=0; j<=3git ; j++) {
+    scanf("%d %c", i, c);
+    test(i, c);
+}

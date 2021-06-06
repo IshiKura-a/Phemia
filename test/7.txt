@@ -1,0 +1,11 @@
+function test(): void {
+    int i = 0;
+    function t(): void {
+        printf("%d\n", i);
+    };
+    i++;
+    t();
+};
+
+test();
+

@@ -1,5 +1,6 @@
 #include <iostream>
 #include "codeGen.hpp"
+#include "coreFunc.hpp"
 #include "node.h"
 
 extern FILE *yyin;
@@ -30,6 +31,7 @@ int main(int argc, char **argv) {
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
     ARStack context;
+    createCoreFunction(context);
     context.generateCode(*programBlock, "test/output.bc");
     return 0;
 }

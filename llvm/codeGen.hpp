@@ -71,7 +71,7 @@ public:
     llvm::IRBuilder<> builder;
     llvm::Module *module;
 
-    ARStack() : builder(llvmContext) { module = new llvm::Module("__program_entry_main", llvmContext); }
+    ARStack() : builder(llvmContext) { module = new llvm::Module("main", llvmContext); }
 
     void generateCode(NBlock &root, const std::string &bcFile);
 
@@ -150,7 +150,7 @@ void ARStack::generateCode(NBlock &root, const std::string &bcFile) {
     std::vector<llvm::Type *> argTypes;
     llvm::FunctionType *fType = llvm::FunctionType::get(llvm::Type::getVoidTy(llvmContext),
                                                         llvm::makeArrayRef(argTypes), false);
-    main = llvm::Function::Create(fType, llvm::GlobalValue::ExternalLinkage, "__program_entry_main", module);
+    main = llvm::Function::Create(fType, llvm::GlobalValue::ExternalLinkage, "main", module);
     llvm::BasicBlock *bBlock = llvm::BasicBlock::Create(llvmContext, "entry", main, nullptr);
     builder.SetInsertPoint(bBlock);
     /* Push a new variable/block context */
@@ -224,22 +224,25 @@ int NChar::getDType() {
 }
 
 llvm::Value *NString::codeGen(ARStack &context) {
+    static int i = 0;
     auto charType = context.typeOf("char");
 
     std::vector<llvm::Constant *> str;
     for (auto ch: value) {
-        str.push_back(llvm::ConstantInt::get(charType, ch));
+        str.push_back(llvm::ConstantInt::get(charType, (uint8_t)ch));
     }
+    str.push_back(llvm::ConstantInt::get(charType, '\0'));
 
     auto stringType = llvm::ArrayType::get(charType, str.size());
 
-    auto globalDeclaration = (llvm::GlobalVariable *) context.module->getOrInsertGlobal(".str", stringType);
+    auto globalDeclaration = (llvm::GlobalVariable *) context.module->getOrInsertGlobal(".str" + std::to_string(i++),
+                                                                                        stringType);
     globalDeclaration->setInitializer(llvm::ConstantArray::get(stringType, str));
     globalDeclaration->setConstant(false);
     globalDeclaration->setLinkage(llvm::GlobalValue::LinkageTypes::PrivateLinkage);
     globalDeclaration->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
 
-    return globalDeclaration;
+    return context.builder.CreateBitCast(globalDeclaration, charType->getPointerTo());
 }
 
 llvm::Value *NVoid::codeGen(ARStack &context) {
@@ -247,6 +250,7 @@ llvm::Value *NVoid::codeGen(ARStack &context) {
 }
 
 llvm::Value *NArray::codeGen(ARStack &context) {
+    static int i = 0;
     auto dType = context.typeOf(type->name);
     if (initList) {
         std::vector<llvm::Constant *> arr;
@@ -290,12 +294,13 @@ llvm::Value *NArray::codeGen(ARStack &context) {
         } else {
             auto arrType = llvm::ArrayType::get(dType, arr.size());
 
-            auto globalDeclaration = (llvm::GlobalVariable *) context.module->getOrInsertGlobal(".arr", arrType);
+            auto globalDeclaration = (llvm::GlobalVariable *) context.module->getOrInsertGlobal(
+                    ".arr" + std::to_string(i++), arrType);
             globalDeclaration->setInitializer(llvm::ConstantArray::get(arrType, arr));
             globalDeclaration->setConstant(false);
             globalDeclaration->setLinkage(llvm::GlobalValue::LinkageTypes::PrivateLinkage);
             globalDeclaration->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
-            return globalDeclaration;
+            return context.builder.CreateBitCast(globalDeclaration, dType->getPointerTo());
         }
     } else {
         auto *arrSize = new std::vector<uint32_t>();
@@ -303,13 +308,13 @@ llvm::Value *NArray::codeGen(ARStack &context) {
         llvm::Value *sizeValue = NInteger(std::to_string(size)).codeGen(context);
         auto arrType = llvm::ArrayType::get(dType, size);
         auto alloc = context.builder.CreateAlloca(arrType, sizeValue, "");
-        return alloc;
+        return context.builder.CreateBitCast(alloc, dType->getPointerTo());
     }
 }
 
 llvm::Value *NBinaryOperator::codeGen(ARStack &context) {
-    auto L = lhs.codeGen(context);
-    auto R = rhs.codeGen(context);
+    auto L = lhs->codeGen(context);
+    auto R = rhs->codeGen(context);
     bool isFP = false;
 
     // type upgrade
@@ -366,7 +371,7 @@ llvm::Value *NBinaryOperator::codeGen(ARStack &context) {
 }
 
 llvm::Value *NUnaryOperator::codeGen(ARStack &context) {
-    auto R = rhs.codeGen(context);
+    auto R = rhs->codeGen(context);
     const bool isFP = R->getType()->isFloatTy() || R->getType()->isDoubleTy();
     switch (op) {
         case NOT:
@@ -380,15 +385,15 @@ llvm::Value *NUnaryOperator::codeGen(ARStack &context) {
 }
 
 llvm::Value *NIdentifier::codeGen(ARStack &context) {
-    auto id = context.get(name)->value;
-    if (!id) {
+    auto id = context.get(name);
+    if (!id || !id->value) {
         std::cerr << "Undeclared value: " << name << std::endl;
         return nullptr;
     }
-    auto type = id->getType()->getPointerElementType();
-    if (type->isIntegerTy() || type->isDoubleTy() || type->isFloatTy())
-        return context.builder.CreateLoad(id, false, "");
-    else return id;
+
+    if (id->size) {
+        return id->value;
+    } else return context.builder.CreateLoad(id->value, false, "");
 }
 
 llvm::Value *NAssignment::codeGen(ARStack &context) {
@@ -409,9 +414,15 @@ llvm::Value *NAssignment::codeGen(ARStack &context) {
             (*(id->size))[0] = val->getType()->getArrayNumElements();
         }
     } else {
-        assert (id->value);
-        context.builder.CreateStore(val, id->value);
-        res = id->value;
+        if (id) {
+            if (id->value) { context.builder.CreateStore(val, id->value); }
+            else {
+                id->value = val;
+            }
+            res = id->value;
+        } else {
+            res = val;
+        }
     }
     return res;
 }
@@ -440,8 +451,8 @@ llvm::Value *NArrayAssignment::codeGen(ARStack &context) {
     auto arrDim = *(id->size);
     auto exp = *(arrayIndices.rbegin());
     for (unsigned i = arrayIndices.size() - 1; i >= 1; i--) {
-        auto tmp = new NBinaryOperator(*(new NInteger(std::to_string(arrDim[i]))), MUL, *arrayIndices[i - 1]);
-        exp = new NBinaryOperator(*exp, PLUS, *tmp);
+        auto tmp = new NBinaryOperator(new NInteger(std::to_string(arrDim[i])), MUL, arrayIndices[i - 1]);
+        exp = new NBinaryOperator(exp, PLUS, tmp);
     }
     auto idx = exp->codeGen(context);
     std::vector<llvm::Value *> arrV;
@@ -511,7 +522,6 @@ llvm::Value *NVariableDeclaration::codeGen(ARStack &context) {
         uint32_t size = 0;
         if (assignmentExpr) {
             alloc = (new NAssignment(id, *assignmentExpr, true))->codeGen(context);
-            size = alloc->getType()->getPointerElementType()->getArrayNumElements();
         }
         auto sizeV = new std::vector<uint32_t>{size};
         context.locals()[id.name] = new VariableRecord(alloc, dType, sizeV);
@@ -553,9 +563,16 @@ llvm::Value *NFunctionDeclaration::codeGen(ARStack &context) {
     }
 
     block.codeGen(context);
+    if (type.name == "void") {
+        context.builder.CreateRetVoid();
+    } else {
+        if (context.getCurrentReturnValue() == nullptr) {
+            std::cerr << "function needs return value!\n";
+            return nullptr;
+        }
+    }
     context.pop();
     context.builder.SetInsertPoint(context.current()->block);
-
     context.locals()[id.name] = new VariableRecord(function, fType, nullptr);
     return function;
 }
@@ -566,7 +583,17 @@ llvm::Value *NFunctionCall::codeGen(ARStack &context) {
         std::cerr << "no such function " << id.name << std::endl;
     }
     std::vector<llvm::Value *> args;
+
+    auto* tmp = new std::vector<uint32_t>();
+    bool flag = false;
     for (auto item: params) {
+        if(id.name == "scanf" && item != params[0]) {
+            auto target = context.get(dynamic_cast<NIdentifier*>(item)->name);
+            if (!target->size) {
+                context.get(dynamic_cast<NIdentifier*>(item)->name)->size = tmp;
+                flag = true;
+            }
+        }
         auto val = item->codeGen(context);
         if (val->getType()->isArrayTy())
             val = context.builder.CreateBitCast(val, val->getType()->getArrayElementType()->getPointerTo());
@@ -575,14 +602,20 @@ llvm::Value *NFunctionCall::codeGen(ARStack &context) {
                     val, val->getType()->getPointerElementType()->getArrayElementType()->getPointerTo());
         }
         args.push_back(val);
+        if(id.name == "scanf" && item != params[0] && flag) {
+            flag = false;
+            context.get(dynamic_cast<NIdentifier*>(item)->name)->size = nullptr;
+        }
     }
+    delete tmp;
 
     std::cout << "Creating method call: " << id.name << std::endl;
-    return context.builder.CreateCall(function, args, "call");
+    return context.builder.CreateCall(function, args, "");
 }
 
 llvm::Value *NArrayElement::codeGen(ARStack &context) {
     auto arr = context.get(id.name);
+    PRINT(arr->value)
     if (!arr) {
         std::cerr << "Undeclared value: " << id.name << std::endl;
         return nullptr;
@@ -596,8 +629,8 @@ llvm::Value *NArrayElement::codeGen(ARStack &context) {
     auto arrDim = *(arr->size);
     auto exp = *(arrayIndices.rbegin());
     for (unsigned i = arrayIndices.size() - 1; i >= 1; i--) {
-        auto tmp = new NBinaryOperator(*(new NInteger(std::to_string(arrDim[i]))), MUL, *arrayIndices[i - 1]);
-        exp = new NBinaryOperator(*exp, PLUS, *tmp);
+        auto tmp = new NBinaryOperator(new NInteger(std::to_string(arrDim[i])), MUL, arrayIndices[i - 1]);
+        exp = new NBinaryOperator(exp, PLUS, tmp);
     }
     auto idx = exp->codeGen(context);
     std::vector<llvm::Value *> arrV;
@@ -765,22 +798,27 @@ llvm::Value *NContinueStatement::codeGen(ARStack &context) {
 }
 
 llvm::Value *NIncOperator::codeGen(ARStack &context) {
-    auto R = rhs.codeGen(context);
+    auto R = rhs->codeGen(context);
+    auto ptr = context.get(dynamic_cast<NIdentifier*>(rhs)->name)->value;
     auto type = R->getType();
     assert(type->isIntegerTy() || type->isDoubleTy() || type->isFloatTy());
     bool isFP = !type->isIntegerTy();
     auto L = isFP ? llvm::ConstantFP::get(type, 1.0) : llvm::ConstantInt::get(type, 1);
     auto res = isFP ? context.builder.CreateFAdd(L, R, "FINC") : context.builder.CreateAdd(L, R, "INC");
+
+    context.builder.CreateStore(res, ptr);
     return isPrefix ? res : R;
 }
 
 llvm::Value *NDecOperator::codeGen(ARStack &context) {
-    auto R = rhs.codeGen(context);
+    auto R = rhs->codeGen(context);
+    auto ptr = context.get(dynamic_cast<NIdentifier*>(rhs)->name)->value;
     auto type = R->getType();
     assert(type->isIntegerTy() || type->isDoubleTy() || type->isFloatTy());
     bool isFP = !type->isIntegerTy();
     auto L = isFP ? llvm::ConstantFP::get(type, 1.0) : llvm::ConstantInt::get(type, 1);
     auto res = isFP ? context.builder.CreateFSub(R, L, "FDEC") : context.builder.CreateSub(R, L, "DEC");
+    context.builder.CreateStore(res, ptr);
     return isPrefix ? res : R;
 }
 
