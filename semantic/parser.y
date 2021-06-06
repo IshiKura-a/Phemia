@@ -83,6 +83,7 @@ doWhileStmt : DO blockedStmt WHILE LSB exp RSB { $$ = new NDoWhileStatement($5, 
     ;
 
 nullableStmt : decl { $$ = $1; }
+    | assign { $$ = new NExpressionStatement($1); }
     | exp { $$ = new NExpressionStatement($1); }
     | { $$ = nullptr; }
     ;
