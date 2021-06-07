@@ -140,7 +140,7 @@ str                     \".*\"
 
 {sizeof}                {incPos(); TOKEN(SIZEOF); return SIZEOF;}
 
-[a-zA-Z_][0-9a-zA-Z]*   {incPos(); STRING_TOKEN; return ID;}
+[a-zA-Z_][0-9a-zA-Z_]*  {incPos(); STRING_TOKEN; return ID;}
 
 .                       {incPos(); printf("Unknown token!\n"); yyterminate();}
 %%
