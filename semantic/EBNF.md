@@ -1,83 +1,144 @@
 ```enbf
-program -> {stmt}
+program : {stmt}
+    ;
 
-stmt -> decl SEMI | def | exp SEMI | ifStmt | forStmt
-    | whileStmt | switchStmt | BREAK SEMI | CONTINUE SEMI
-    | retStmt SEMI | IOStmt SEMI | throwStmt SEMI
-    | tryStmt | assign SEMI
-blockedStmt -> LLB {oneStmt} RLB
+stmt : decl SEMI
+    | ifStmt
+    | forStmt
+    | whileStmt
+    | doWhileStmt SEMI
+    | assign SEMI
+    | exp SEMI
+    | BREAK SEMI
+    | CONTINUE SEMI
+    ;
 
+whileStmt : WHILE LSB exp RSB blockedStmt
+    ;
 
-decl -> idDecl | constIdDecl | funcDecl | enumDecl
-idDecl -> type ID [ASSIGN exp]{COMMA ID [ASSIGN exp]}
-constIdDecl -> CONST type ASSIGN exp {COMMA ID ASSIGN exp}
-funcDecl -> FUNCTION ID LSB declParamList RSB COLON type blockedStmt
-enumDecl -> ENUM ID LLB ID ASSIGN exp COMMA {ID ASSIGN exp} RLB
+doWhileStmt : DO blockedStmt WHILE LSB exp RSB
+    ;
 
-exp -> expr
+nullableStmt : decl
+    | assign
+    | exp
+    | e
+    ;
+
+ifStmt : IF LSB exp RSB blockedStmt [ELSE blockedStmt]
+    | IF LSB exp RSB blockedStmt ELSE ifStmt
+    ;
+
+forStmt : FOR LSB nullableStmt SEMI exp SEMI nullableStmt RSB blockedStmt
+blockedStmt : LLB stmts RLB
+    | LLB RLB
+    ;
+
+decl : idDecl
+    | constIdDecl
+    | funcDecl
+    | RETURN exp
+    | RETURN
+    ;
+
+idDecl : type id
+    | type id ASSIGN exp
+    ;
+
+literalArray : LLB literalList RLB
+    ;
+literalList : literalList COMMA literal
+    | literal
+    ;
+
+constIdDecl : CONST type id
+    | CONST type id ASSIGN exp
+    ;
+
+funcDecl : FUNCTION id LSB declParamList RSB COLON type blockedStmt
+    ;
+
+declParamList : idDecl
+    | constIdDecl
+    | declParamList COMMA constIdDecl
+    | declParamList COMMA idDecl
+    | e
+    ;
+
+exp : expr
     | exp GE expr
     | exp GT expr
     | exp LE expr
     | exp LT expr
     | exp NE expr
     | exp EQ expr
-expr -> expr PLUS term
+    ;
+expr : expr PLUS term
     | expr MINUS term
     | expr OR term
     | term
-term -> term MUL factor
+    ;
+term : term MUL factor
     | term DIV factor
     | term AND factor
     | term MOD factor
     | term XOR factor
     | factor
-factor -> literal
-    | ID
+    ;
+factor : literal
+    | id
     | call
     | LSB exp RSB
     | NOT factor
     | MINUS factor
-    | ID DOT ID
-    | ID DOT call
-    | ID LMB exp RMB
-    | LLB literal {COMMA literal} RLB
+    | INC id
+    | DEC id
+    | id INC
+    | id DEC
+    | id DOT id
+    | id DOT call
+    | id arrayIndices
+    | arrayDimensions type literalArray
+    | NEW arrayDimensions type LSB RSB
     | SIZEOF LSB type RSB
-call -> ID LSB [paramList] RSB
-literal -> INTEGER | BOOL | STR | DNUMBER | FNUMBER
+    ;
+arrayDimensions : arrayDimensions LMB INTEGER RMB
+    | LMB INTEGER RMB
+    ;
+arrayIndices : arrayIndices LMB exp RMB
+    | LMB exp RMB
+    ;
+call : id LSB RSB
+    | id LSB paramList RSB
+    ;
+assign : id ASSIGN exp
+    | id arrayIndices ASSIGN exp
+    | id DOT id RMB ASSIGN exp
+    ;
+paramList : exp
+    | paramList COMMA exp
+    ;
+literal : INTEGER
+    | BOOL
+    | STR
+    | DNUMBER
+    | FNUMBER
     | CHARACTER
-paramList -> exp {COMMA exp}
-declParamList -> type ID {COMMA type ID}
+    ;
 
-def -> classDef
-classDef -> CLASS ID [COLON ID] LLB {[scope] classCompoDef} RLB
-classCompoDef -> funcDef | idDecl
-scope -> PUBLIC | PRIVATE | PROTECTED
+type : id
+    | basicType
+    | arrayDimensions basicType
+    ;
 
-ifStmt -> IF LSB exp RSB oneStmt [elseBlock]
-elseBlock -> ELSE oneStmt
+basicType : INT
+    | CHAR
+    | DOUBLE
+    | FLOAT
+    | BOOLEAN
+    | VOID
+    | STRING
+    ;
 
-forStmt -> FOR LSB exp SEMI exp SEMI exp RSB oneStmt
-    | FOR LSB type ID IN exp RSB oneStmt
-
-whileStmt -> WHILE LSB exp RSB oneStmt
-switchStmt -> SWITCH LSB exp RSB LLB {caseStmt} RLB
-caseStmt -> CASE exp COLON {oneStmt}
-    | DEFAULT COLON {oneStmt}
-
-retStmt -> RETURN exp
-
-IOStmt -> READ LSB STRING COMMA ID {COMMA ID} RSB
-    | PRINT LSB STRING COMMA exp {COMMA exp} RSB
-
-type -> INT | CHAR | DOUBLE | FLOAT | BOOLEAN | VOID
-    | STRING | ID | LMB RMB type
-    | FUNCTION LSB [type ID {COMMA type ID}] RSB COLON type
-
-throwStmt -> THROW exp
-
-tryStmt -> TRY LLB {oneStmt} RLB CATCH LSB type ID RSB LLB {oneStmt} RLB
-
-assign -> ID ASSIGN exp
-    | ID DOT ID ASSIGN exp
-    | ID LMB exp RMB ASSIGN exp
+id : ID { $$ = new NIdentifier(*$1); };
 ```

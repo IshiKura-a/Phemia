@@ -76,7 +76,7 @@ public:
 
     ARStack() : builder(llvmContext) { module = new llvm::Module("main", llvmContext); }
 
-    void generateCode(NBlock &root, const std::string &bcFile);
+    void generateCode(NBlock &root, const std::string &file);
 
     llvm::GenericValue runCode();
 
@@ -148,10 +148,10 @@ public:
     }
 };
 
-void ARStack::generateCode(NBlock &root, const std::string &bcFile) {
+void ARStack::generateCode(NBlock &root, const std::string &file) {
     /* Create the top level interpreter function to call as entry */
     std::vector<llvm::Type *> argTypes;
-    llvm::FunctionType *fType = llvm::FunctionType::get(llvm::Type::getVoidTy(llvmContext),
+    llvm::FunctionType *fType = llvm::FunctionType::get(llvm::Type::getInt32Ty(llvmContext),
                                                         llvm::makeArrayRef(argTypes), false);
     main = llvm::Function::Create(fType, llvm::GlobalValue::ExternalLinkage, "main", module);
     llvm::BasicBlock *bBlock = llvm::BasicBlock::Create(llvmContext, "entry", main, nullptr);
@@ -159,19 +159,22 @@ void ARStack::generateCode(NBlock &root, const std::string &bcFile) {
     /* Push a new variable/block context */
     push(bBlock);
     root.codeGen(*this); /* emit bytecode for the toplevel block */
-    builder.CreateRetVoid();
+    builder.CreateRet(llvm::ConstantInt::get(typeOf("int"), 0, true));
     pop();
 
     /* Print the bytecode in a human-readable format to see if our program compiled properly */
-    llvm::legacy::PassManager pm;
-    pm.add(llvm::createPrintModulePass(llvm::outs()));
-    pm.run(*module);
-
+//    llvm::legacy::PassManager pm;
+//    pm.add(llvm::createPrintModulePass(llvm::outs()));
+//    pm.run(*module);
+//
     std::error_code errInfo;
-    llvm::raw_ostream *out = new llvm::raw_fd_ostream(bcFile, errInfo);
-    llvm::WriteBitcodeToFile(*module, *out);
-    out->flush();
-    delete out;
+//    llvm::raw_ostream *out = new llvm::raw_fd_ostream(file, errInfo);
+//    llvm::WriteBitcodeToFile(*module, *out);
+//    out->flush();
+//    delete out;
+
+    llvm::raw_fd_ostream out(file, errInfo);
+    module->print(out, nullptr);
 }
 
 llvm::GenericValue ARStack::runCode() {
@@ -232,7 +235,7 @@ llvm::Value *NString::codeGen(ARStack &context) {
 
     std::vector<llvm::Constant *> str;
     for (auto ch: value) {
-        str.push_back(llvm::ConstantInt::get(charType, (uint8_t)ch));
+        str.push_back(llvm::ConstantInt::get(charType, (uint8_t) ch));
     }
     str.push_back(llvm::ConstantInt::get(charType, '\0'));
 
@@ -309,7 +312,8 @@ llvm::Value *NArray::codeGen(ARStack &context) {
         auto *arrSize = new std::vector<uint32_t>();
         uint64_t size = util::calArrayDim(arrDim, arrSize);
         auto arrType = llvm::ArrayType::get(dType, size);
-        auto *val= new llvm::GlobalVariable(*context.module, arrType, false, llvm::GlobalValue::CommonLinkage, 0, "arr");
+        auto *val = new llvm::GlobalVariable(*context.module, arrType, false, llvm::GlobalValue::CommonLinkage, 0,
+                                             "arr");
         auto *constArr = llvm::ConstantAggregateZero::get(arrType);
         val->setInitializer(constArr);
         return context.builder.CreateBitCast(val, dType->getPointerTo());
@@ -330,6 +334,13 @@ llvm::Value *NBinaryOperator::codeGen(ARStack &context) {
         }
         if (L->getType()->isIntegerTy()) {
             L = context.builder.CreateSIToFP(L, llvm::Type::getDoubleTy(context.llvmContext), "FTMP");
+        }
+    }
+    if (!isFP) {
+        if (L->getType()->getIntegerBitWidth() < R->getType()->getIntegerBitWidth()) {
+            L = context.builder.CreateIntCast(L, R->getType(), true);
+        } else if (L->getType()->getIntegerBitWidth() > R->getType()->getIntegerBitWidth()) {
+            R = context.builder.CreateIntCast(R, L->getType(), true);
         }
     }
 
@@ -397,7 +408,7 @@ llvm::Value *NIdentifier::codeGen(ARStack &context) {
 
     if (id->size) {
         return id->value;
-    } else return context.builder.CreateLoad(id->value, false, "");
+    } else return context.builder.CreateLoad(id->value, false, "load");
 }
 
 llvm::Value *NAssignment::codeGen(ARStack &context) {
@@ -407,7 +418,6 @@ llvm::Value *NAssignment::codeGen(ARStack &context) {
         std::cerr << "Undeclared value: " << lhs.name << std::endl;
         return nullptr;
     }
-    std::cout << "Creating assignment for " << lhs.name << std::endl;
     auto val = rhs.codeGen(context);
     auto type = val->getType();
     if (type->isArrayTy() || (type->isPointerTy() && type->getPointerElementType()->isArrayTy())) {
@@ -477,26 +487,22 @@ llvm::Value *NBlock::codeGen(ARStack &context) {
     llvm::Value *last = nullptr;
     for (it = statements.begin(); it != statements.end(); it++) {
         auto &statement = **it;
-        std::cout << "Generating code for " << typeid(statement).name() << std::endl;
         last = (statement).codeGen(context);
     }
     return last;
 }
 
 llvm::Value *NExpressionStatement::codeGen(ARStack &context) {
-    std::cout << "Generating code for " << typeid(expression).name() << std::endl;
     return expression->codeGen(context);
 }
 
 llvm::Value *NReturnStatement::codeGen(ARStack &context) {
-    if(expression) {
-        std::cout << "Generating return code for " << typeid(expression).name() << std::endl;
+    if (expression) {
         llvm::Value *retVal = expression->codeGen(context);
         context.setCurrentReturnValue(retVal);
         context.builder.CreateRet(context.getCurrentReturnValue());
         return retVal;
-    }
-    else {
+    } else {
         return context.builder.CreateRetVoid();
     }
 
@@ -507,7 +513,6 @@ llvm::Value *NVariableDeclaration::codeGen(ARStack &context) {
         std::cerr << "Redeclared value: " << id.name << std::endl;
         return nullptr;
     }
-    std::cout << "Creating variable declaration " << type.name << " " << id.name << std::endl;
     llvm::Value *alloc = nullptr;
     auto dType = context.typeOf(type.name);
     auto arrDim = type.getArrayDim();
@@ -539,7 +544,6 @@ llvm::Value *NVariableDeclaration::codeGen(ARStack &context) {
 }
 
 llvm::Value *NFunctionDeclaration::codeGen(ARStack &context) {
-    std::cout << "Creating function: " << id.name << std::endl;
     std::vector<llvm::Type *> argTypes;
     for (auto item: arguments) {
         auto arrDim = item->type.getArrayDim();
@@ -592,13 +596,13 @@ llvm::Value *NFunctionCall::codeGen(ARStack &context) {
     }
     std::vector<llvm::Value *> args;
 
-    auto* tmp = new std::vector<uint32_t>();
+    auto *tmp = new std::vector<uint32_t>();
     bool flag = false;
     for (auto item: params) {
-        if(id.name == "scanf" && item != params[0]) {
-            auto target = context.get(dynamic_cast<NIdentifier*>(item)->name);
+        if (id.name == "scanf" && item != params[0]) {
+            auto target = context.get(dynamic_cast<NIdentifier *>(item)->name);
             if (!target->size) {
-                context.get(dynamic_cast<NIdentifier*>(item)->name)->size = tmp;
+                context.get(dynamic_cast<NIdentifier *>(item)->name)->size = tmp;
                 flag = true;
             }
         }
@@ -610,20 +614,19 @@ llvm::Value *NFunctionCall::codeGen(ARStack &context) {
                     val, val->getType()->getPointerElementType()->getArrayElementType()->getPointerTo());
         }
         args.push_back(val);
-        if(id.name == "scanf" && item != params[0] && flag) {
+        if (id.name == "scanf" && item != params[0] && flag) {
             flag = false;
-            context.get(dynamic_cast<NIdentifier*>(item)->name)->size = nullptr;
+            context.get(dynamic_cast<NIdentifier *>(item)->name)->size = nullptr;
         }
     }
     delete tmp;
 
-    std::cout << "Creating method call: " << id.name << std::endl;
-    return context.builder.CreateCall(function, args, "");
+    return context.builder.CreateCall(function, args,
+                                      function->getFunctionType()->getReturnType()->isVoidTy() ? "" : "call");
 }
 
 llvm::Value *NArrayElement::codeGen(ARStack &context) {
     auto arr = context.get(id.name);
-    PRINT(arr->value)
     if (!arr) {
         std::cerr << "Undeclared value: " << id.name << std::endl;
         return nullptr;
@@ -633,7 +636,7 @@ llvm::Value *NArrayElement::codeGen(ARStack &context) {
         return nullptr;
     }
 
-    assert(arrayIndices.size() == arr->size->size());
+//    assert(arrayIndices.size() == arr->size->size());
     auto arrDim = *(arr->size);
     auto exp = *(arrayIndices.rbegin());
     for (unsigned i = arrayIndices.size() - 1; i >= 1; i--) {
@@ -650,7 +653,6 @@ llvm::Value *NArrayElement::codeGen(ARStack &context) {
 }
 
 llvm::Value *NIfStatement::codeGen(ARStack &context) {
-    std::cout << "Creating if statement" << std::endl;
     llvm::Value *condValue = condition->codeGen(context);
     if (!condValue)
         return nullptr;
@@ -661,7 +663,7 @@ llvm::Value *NIfStatement::codeGen(ARStack &context) {
 
     llvm::BasicBlock *thenBB = llvm::BasicBlock::Create(context.llvmContext, "then", function);
     llvm::BasicBlock *elseBB;
-    if(elseBlock)
+    if (elseBlock)
         elseBB = llvm::BasicBlock::Create(context.llvmContext, "else", function);
     llvm::BasicBlock *afterBB = llvm::BasicBlock::Create(context.llvmContext, "afterIf", function);
 
@@ -699,10 +701,12 @@ llvm::Value *NForStatement::codeGen(ARStack &context) {
     context.inLoop++;
     auto prevMerge = context.curMerge;
     auto prevCond = context.curCond;
+    context.curMerge = after;
+    context.curCond = forCond;
 
     context.builder.SetInsertPoint(forLoop);
     block->codeGen(context);
-    if(inc) inc->codeGen(context);
+    if (inc) inc->codeGen(context);
     context.builder.CreateBr(forCond);
 
     context.builder.SetInsertPoint(forCond);
@@ -728,6 +732,8 @@ llvm::Value *NWhileStatement::codeGen(ARStack &context) {
     context.inLoop++;
     auto prevMerge = context.curMerge;
     auto prevCond = context.curCond;
+    context.curMerge = after;
+    context.curCond = whileCond;
 
     context.builder.SetInsertPoint(whileLoop);
     block->codeGen(context);
@@ -756,6 +762,8 @@ llvm::Value *NDoWhileStatement::codeGen(ARStack &context) {
     context.inLoop++;
     auto prevMerge = context.curMerge;
     auto prevCond = context.curCond;
+    context.curMerge = after;
+    context.curCond = whileCond;
 
     context.builder.SetInsertPoint(whileLoop);
     block->codeGen(context);
@@ -793,7 +801,7 @@ llvm::Value *NContinueStatement::codeGen(ARStack &context) {
 
 llvm::Value *NIncOperator::codeGen(ARStack &context) {
     auto R = rhs->codeGen(context);
-    auto ptr = context.get(dynamic_cast<NIdentifier*>(rhs)->name)->value;
+    auto ptr = context.get(dynamic_cast<NIdentifier *>(rhs)->name)->value;
     auto type = R->getType();
     assert(type->isIntegerTy() || type->isDoubleTy() || type->isFloatTy());
     bool isFP = !type->isIntegerTy();
@@ -806,7 +814,7 @@ llvm::Value *NIncOperator::codeGen(ARStack &context) {
 
 llvm::Value *NDecOperator::codeGen(ARStack &context) {
     auto R = rhs->codeGen(context);
-    auto ptr = context.get(dynamic_cast<NIdentifier*>(rhs)->name)->value;
+    auto ptr = context.get(dynamic_cast<NIdentifier *>(rhs)->name)->value;
     auto type = R->getType();
     assert(type->isIntegerTy() || type->isDoubleTy() || type->isFloatTy());
     bool isFP = !type->isIntegerTy();

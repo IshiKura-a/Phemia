@@ -33,8 +33,21 @@ void createScanf(ARStack& context) {
     );
     printf->setCallingConv(llvm::CallingConv::C);
 }
+
+void createGets(ARStack& context) {
+    std::vector<llvm::Type*> argTypes;
+    auto fType = llvm::FunctionType::get(
+            context.typeOf("int"), argTypes, true);
+    auto printf = llvm::Function::Create(
+            fType, llvm::Function::ExternalLinkage,
+            llvm::Twine("gets"),
+            context.module
+    );
+    printf->setCallingConv(llvm::CallingConv::C);
+}
 void createCoreFunction(ARStack& context) {
     createPrintf(context);
     createScanf(context);
+    createGets(context);
 }
 #endif //PHEMIA_COREFUNC_HPP

@@ -32,6 +32,6 @@ int main(int argc, char **argv) {
     llvm::InitializeNativeTargetAsmParser();
     ARStack context;
     createCoreFunction(context);
-    context.generateCode(*programBlock, "test/output.bc");
+    context.generateCode(*programBlock, "test/output.ll");
     return 0;
 }

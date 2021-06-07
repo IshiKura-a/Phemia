@@ -1,0 +1,18 @@
+[105]char nameTmp = new [105]char();
+[105]char prevTmp = new [105]char();
+[105]char gradeTmp = new [105]char();
+int creditTmp;
+[10]char s = new [10]char();
+int a;
+
+int res;
+int i = 0;
+do {
+    res = gets(nameTmp);
+    if(nameTmp[0]!='\0') {
+        printf("%s--%d\n", nameTmp, res);
+        i++;
+    }
+} while(res > 0);
+
+

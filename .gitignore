@@ -17,4 +17,6 @@ Output
 **/*.o
 **/darwin-amd64
 **/Quicksort
-**/MatrixMul
+test/MatrixMul/MatrixMul
+test/Course/Course
+**/*.ll
