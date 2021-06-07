@@ -151,7 +151,7 @@ public:
 void ARStack::generateCode(NBlock &root, const std::string &file) {
     /* Create the top level interpreter function to call as entry */
     std::vector<llvm::Type *> argTypes;
-    llvm::FunctionType *fType = llvm::FunctionType::get(llvm::Type::getVoidTy(llvmContext),
+    llvm::FunctionType *fType = llvm::FunctionType::get(llvm::Type::getInt32Ty(llvmContext),
                                                         llvm::makeArrayRef(argTypes), false);
     main = llvm::Function::Create(fType, llvm::GlobalValue::ExternalLinkage, "main", module);
     llvm::BasicBlock *bBlock = llvm::BasicBlock::Create(llvmContext, "entry", main, nullptr);
@@ -159,7 +159,7 @@ void ARStack::generateCode(NBlock &root, const std::string &file) {
     /* Push a new variable/block context */
     push(bBlock);
     root.codeGen(*this); /* emit bytecode for the toplevel block */
-    builder.CreateRetVoid();
+    builder.CreateRet(llvm::ConstantInt::get(typeOf("int"), 0, true));
     pop();
 
     /* Print the bytecode in a human-readable format to see if our program compiled properly */
@@ -418,7 +418,6 @@ llvm::Value *NAssignment::codeGen(ARStack &context) {
         std::cerr << "Undeclared value: " << lhs.name << std::endl;
         return nullptr;
     }
-    std::cout << "Creating assignment for " << lhs.name << std::endl;
     auto val = rhs.codeGen(context);
     auto type = val->getType();
     if (type->isArrayTy() || (type->isPointerTy() && type->getPointerElementType()->isArrayTy())) {
@@ -488,20 +487,17 @@ llvm::Value *NBlock::codeGen(ARStack &context) {
     llvm::Value *last = nullptr;
     for (it = statements.begin(); it != statements.end(); it++) {
         auto &statement = **it;
-        std::cout << "Generating code for " << typeid(statement).name() << std::endl;
         last = (statement).codeGen(context);
     }
     return last;
 }
 
 llvm::Value *NExpressionStatement::codeGen(ARStack &context) {
-    std::cout << "Generating code for " << typeid(expression).name() << std::endl;
     return expression->codeGen(context);
 }
 
 llvm::Value *NReturnStatement::codeGen(ARStack &context) {
     if (expression) {
-        std::cout << "Generating return code for " << typeid(expression).name() << std::endl;
         llvm::Value *retVal = expression->codeGen(context);
         context.setCurrentReturnValue(retVal);
         context.builder.CreateRet(context.getCurrentReturnValue());
@@ -517,7 +513,6 @@ llvm::Value *NVariableDeclaration::codeGen(ARStack &context) {
         std::cerr << "Redeclared value: " << id.name << std::endl;
         return nullptr;
     }
-    std::cout << "Creating variable declaration " << type.name << " " << id.name << std::endl;
     llvm::Value *alloc = nullptr;
     auto dType = context.typeOf(type.name);
     auto arrDim = type.getArrayDim();
@@ -549,7 +544,6 @@ llvm::Value *NVariableDeclaration::codeGen(ARStack &context) {
 }
 
 llvm::Value *NFunctionDeclaration::codeGen(ARStack &context) {
-    std::cout << "Creating function: " << id.name << std::endl;
     std::vector<llvm::Type *> argTypes;
     for (auto item: arguments) {
         auto arrDim = item->type.getArrayDim();
@@ -627,14 +621,12 @@ llvm::Value *NFunctionCall::codeGen(ARStack &context) {
     }
     delete tmp;
 
-    std::cout << "Creating method call: " << id.name << std::endl;
     return context.builder.CreateCall(function, args,
                                       function->getFunctionType()->getReturnType()->isVoidTy() ? "" : "call");
 }
 
 llvm::Value *NArrayElement::codeGen(ARStack &context) {
     auto arr = context.get(id.name);
-    PRINT(arr->value)
     if (!arr) {
         std::cerr << "Undeclared value: " << id.name << std::endl;
         return nullptr;
@@ -661,7 +653,6 @@ llvm::Value *NArrayElement::codeGen(ARStack &context) {
 }
 
 llvm::Value *NIfStatement::codeGen(ARStack &context) {
-    std::cout << "Creating if statement" << std::endl;
     llvm::Value *condValue = condition->codeGen(context);
     if (!condValue)
         return nullptr;
