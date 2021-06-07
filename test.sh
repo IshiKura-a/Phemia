@@ -16,5 +16,5 @@ gcc test/output.o -o test/MatrixMul/MatrixMul
 echo "---------Course---------"
 ./Phemia test/Course/ans.txt &&
 llc -filetype=obj test/output.ll &&
-gcc test/output.o -o test/Course/Course -w
+gcc test/output.o -o test/Course/Course
 ./test/Course/darwin-amd64 ./test/Course/Course
